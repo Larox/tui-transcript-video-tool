@@ -1,0 +1,22 @@
+[project]
+name = "tui-transcript"
+version = "0.1.0"
+description = "TUI app to transcribe video files via Deepgram and export to Google Docs or Markdown"
+requires-python = ">=3.12"
+dependencies = [
+    "textual",
+    "deepgram-sdk",
+    "google-api-python-client",
+    "google-auth",
+    "python-dotenv",
+]
+
+[project.scripts]
+tui-transcript = "tui_transcript.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tui_transcript"]

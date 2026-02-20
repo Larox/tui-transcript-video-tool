@@ -1,0 +1,198 @@
+/* ── Global ── */
+Screen {
+    background: $surface;
+}
+
+/* ── Config screen ── */
+#config-scroll {
+    padding: 1 2;
+}
+
+.field-label {
+    margin-top: 1;
+    color: $text;
+    text-style: bold;
+}
+
+#config-scroll Input {
+    margin-bottom: 0;
+}
+
+#output_mode_label {
+    margin-top: 1;
+    color: $accent;
+    text-style: bold italic;
+}
+
+#md-output-row {
+    height: 3;
+}
+
+#md_output_dir_label {
+    width: 1fr;
+    content-align-vertical: middle;
+}
+
+#btn_md_browse {
+    min-width: 12;
+    margin-left: 1;
+}
+
+#btn_continue {
+    margin-top: 1;
+    min-width: 20;
+}
+
+/* ── Dashboard ── */
+#dashboard {
+    padding: 1 2;
+}
+
+#mode_banner {
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#file-input-row {
+    height: 3;
+    margin-bottom: 1;
+}
+
+#btn_browse {
+    min-width: 14;
+}
+
+#btn_settings {
+    margin-left: 1;
+}
+
+#job_list {
+    height: auto;
+    max-height: 10;
+    margin-bottom: 1;
+    border: solid $accent;
+}
+
+.section-label {
+    color: $text;
+    text-style: bold;
+}
+
+#overall_progress {
+    margin: 0 0 0 0;
+}
+
+#status_label {
+    color: $text-muted;
+}
+
+#action-row {
+    height: 3;
+}
+
+#action-row Button {
+    margin-right: 1;
+}
+
+#log {
+    height: 1fr;
+    min-height: 10;
+    border: solid $primary;
+}
+
+/* ── File Picker Modal ── */
+FilePickerScreen {
+    align: center middle;
+}
+
+#picker {
+    width: 100%;
+    height: 100%;
+    background: $surface;
+    padding: 1 2;
+}
+
+#picker-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#picker-nav {
+    height: 3;
+    margin-bottom: 1;
+}
+
+#picker-nav Input {
+    width: 1fr;
+}
+
+#dir_tree {
+    height: 1fr;
+    border: solid $primary;
+}
+
+#selected_count {
+    text-style: bold;
+}
+
+#selected_list {
+    height: 1fr;
+    border: solid $accent;
+}
+
+#picker-actions {
+    height: 3;
+    margin-top: 1;
+}
+
+#picker-actions Button {
+    margin-right: 1;
+}
+
+/* ── Directory Picker Modal ── */
+DirPickerScreen {
+    align: center middle;
+}
+
+#dir-picker {
+    width: 100%;
+    height: 100%;
+    background: $surface;
+    padding: 1 2;
+}
+
+#dir-picker-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#dir-picker-nav {
+    height: 3;
+    margin-bottom: 1;
+}
+
+#dir-picker-nav Input {
+    width: 1fr;
+}
+
+#dir_only_tree {
+    height: 1fr;
+    border: solid $primary;
+}
+
+#dir_selected_label {
+    margin-top: 1;
+    text-style: bold;
+}
+
+#dir-picker-actions {
+    height: 3;
+    margin-top: 1;
+}
+
+#dir-picker-actions Button {
+    margin-right: 1;
+}
