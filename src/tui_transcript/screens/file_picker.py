@@ -6,6 +6,7 @@ from typing import Iterable
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.events import Click
 from textual.screen import ModalScreen
 from textual.suggester import Suggester
 from textual.widgets import (
@@ -57,6 +58,13 @@ class PathSuggester(Suggester):
 
 class VideoDirectoryTree(DirectoryTree):
     """DirectoryTree that only shows directories and video/audio files."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.shift_held: bool = False
+
+    def on_click(self, event: Click) -> None:
+        self.shift_held = event.shift
 
     def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
         return [
@@ -114,6 +122,7 @@ class FilePickerScreen(ModalScreen[list[tuple[Path, str]]]):
         self._start_path = start_path
         self._default_lang = "es"
         self.selected: dict[Path, str] = {}
+        self._anchor: Path | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="picker"):
@@ -126,6 +135,10 @@ class FilePickerScreen(ModalScreen[list[tuple[Path, str]]]):
                     suggester=PathSuggester(case_sensitive=True),
                 )
             yield VideoDirectoryTree(self._start_path, id="dir_tree")
+            yield Label(
+                "Shift+click to select a range",
+                id="picker-hint",
+            )
             yield Label("Selected (0)", id="selected_count")
             yield VerticalScroll(id="selected_list")
             with Horizontal(id="picker-actions"):
@@ -150,6 +163,18 @@ class FilePickerScreen(ModalScreen[list[tuple[Path, str]]]):
     @on(DirectoryTree.FileSelected)
     def _file_clicked(self, event: DirectoryTree.FileSelected) -> None:
         path = event.path.resolve()
+        tree = self.query_one("#dir_tree", VideoDirectoryTree)
+        shift = tree.shift_held
+        tree.shift_held = False
+
+        if shift and self._anchor is not None and path != self._anchor:
+            self._select_range(self._anchor, path)
+        else:
+            self._toggle_file(path)
+
+        self._anchor = path
+
+    def _toggle_file(self, path: Path) -> None:
         container = self.query_one("#selected_list", VerticalScroll)
         entry_id = self._entry_id(path)
 
@@ -163,6 +188,43 @@ class FilePickerScreen(ModalScreen[list[tuple[Path, str]]]):
             self.selected[path] = self._default_lang
             container.mount(FileEntry(path, self._default_lang, id=entry_id))
 
+        self._update_count()
+
+    def _get_visible_files(self) -> list[Path]:
+        """Walk the tree and return visible file paths in display order."""
+        tree = self.query_one("#dir_tree", VideoDirectoryTree)
+        files: list[Path] = []
+
+        def walk(node) -> None:
+            if node.data is not None:
+                p = node.data.path if hasattr(node.data, "path") else node.data
+                if isinstance(p, Path) and p.is_file():
+                    files.append(p.resolve())
+            if node.allow_expand and node.is_expanded:
+                for child in node.children:
+                    walk(child)
+
+        walk(tree.root)
+        return files
+
+    def _select_range(self, anchor: Path, target: Path) -> None:
+        """Select all visible files between *anchor* and *target* (inclusive)."""
+        visible = self._get_visible_files()
+        try:
+            idx_a = visible.index(anchor)
+            idx_t = visible.index(target)
+        except ValueError:
+            self._toggle_file(target)
+            return
+
+        start, end = sorted([idx_a, idx_t])
+        container = self.query_one("#selected_list", VerticalScroll)
+        for f in visible[start : end + 1]:
+            if f not in self.selected:
+                self.selected[f] = self._default_lang
+                container.mount(
+                    FileEntry(f, self._default_lang, id=self._entry_id(f))
+                )
         self._update_count()
 
     def _update_count(self) -> None:

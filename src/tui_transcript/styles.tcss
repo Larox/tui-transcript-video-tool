@@ -133,6 +133,12 @@ FilePickerScreen {
     border: solid $primary;
 }
 
+#picker-hint {
+    color: $text-muted;
+    text-style: italic;
+    margin: 0 0;
+}
+
 #selected_count {
     text-style: bold;
 }

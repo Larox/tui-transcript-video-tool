@@ -24,12 +24,14 @@ from tui_transcript.models import (
     AppConfig,
     JobStatus,
     LANGUAGES,
+    NamingMode,
     OutputMode,
     VideoJob,
     build_doc_title,
 )
 from tui_transcript.screens.config import ConfigScreen
 from tui_transcript.screens.file_picker import FilePickerScreen
+from tui_transcript.services.history import HistoryDB
 from tui_transcript.services.transcription import transcribe
 
 logger = logging.getLogger(__name__)
@@ -237,9 +239,23 @@ class DashboardScreen(Screen):
         self._refresh_jobs()
 
         exporter = self._get_exporter()
+        history = HistoryDB()
+        output_mode = self.config.output_mode.value
+        next_seq = history.get_next_sequential_number(self.config.prefix)
 
         for idx, job in enumerate(pending):
-            overall_idx = self.jobs.index(job)
+            source_path = str(job.path)
+
+            if history.is_already_processed(source_path, self.config.prefix, output_mode):
+                self._log(
+                    f"[bold magenta]Skipped:[/] {job.path.name} "
+                    f"(already processed with prefix '{self.config.prefix}')"
+                )
+                job.status = JobStatus.DONE
+                self._refresh_jobs()
+                progress.advance(2)
+                continue
+
             step_done = 0
             try:
                 # --- Transcribe ---
@@ -269,10 +285,22 @@ class DashboardScreen(Screen):
                 progress.advance(1)
                 step_done = 1
 
+                # --- Build title (with history-aware numbering) ---
+                seq_number: int | None = None
+                if self.config.naming_mode == NamingMode.SEQUENTIAL:
+                    seq_number = next_seq
+                    title = build_doc_title(self.config, job.path, next_seq)
+                else:
+                    title = build_doc_title(self.config, job.path, 0)
+                    suffix = 2
+                    base_title = title
+                    while history.get_output_title_exists(title, output_mode):
+                        title = f"{base_title}_{suffix}"
+                        suffix += 1
+
                 # --- Export ---
                 job.status = JobStatus.UPLOADING
                 self._refresh_jobs()
-                title = build_doc_title(self.config, job.path, overall_idx)
 
                 if self.config.output_mode == OutputMode.GOOGLE_DOCS:
                     status_label.update(
@@ -309,6 +337,22 @@ class DashboardScreen(Screen):
                 job.status = JobStatus.DONE
                 self._refresh_jobs()
 
+                history.record(
+                    source_path=source_path,
+                    prefix=self.config.prefix,
+                    naming_mode=self.config.naming_mode.value,
+                    sequential_number=seq_number,
+                    output_title=title,
+                    output_mode=output_mode,
+                    output_path=job.output_path or None,
+                    doc_id=job.doc_id or None,
+                    doc_url=job.doc_url or None,
+                    language=job.language,
+                )
+
+                if self.config.naming_mode == NamingMode.SEQUENTIAL:
+                    next_seq += 1
+
             except Exception as exc:
                 job.status = JobStatus.ERROR
                 job.error = str(exc)
@@ -322,6 +366,7 @@ class DashboardScreen(Screen):
                 self._log(f"[dim red]{tb}[/]")
                 logger.error("Job failed for %s:\n%s", job.path.name, tb)
 
+        history.close()
         status_label.update("Done!")
         self._log("[bold green]All tasks completed.[/]")
         btn.disabled = False

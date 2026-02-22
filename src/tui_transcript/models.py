@@ -67,7 +67,7 @@ class VideoJob:
     error: str = ""
 
 
-def build_doc_title(config: AppConfig, file_path: Path, index: int) -> str:
+def build_doc_title(config: AppConfig, file_path: Path, seq_number: int) -> str:
     if config.naming_mode == NamingMode.SEQUENTIAL:
-        return f"{config.prefix}_{index + 1}"
+        return f"{config.prefix}_{seq_number}"
     return f"{config.prefix}_{file_path.stem}"
