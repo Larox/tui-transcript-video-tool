@@ -5,11 +5,13 @@ import {
   uploadFiles,
   startTranscription,
   subscribeToProgress,
+  openPath,
   type UploadedFile,
   type FileSpec,
   type SSEEvent,
   type JobStatus,
 } from '@/api/client';
+import { FolderOpen, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -203,17 +205,59 @@ export function Dashboard() {
                 <span className="text-xs text-muted-foreground capitalize shrink-0 w-24">
                   {Object.values(jobs).find((j) => j.path.endsWith(f.name))?.status ?? 'pending'}
                 </span>
-                {!processing && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => removeFile(f.id)}
-                  >
-                    Remove
-                  </Button>
-                )}
+                {(() => {
+                  const job = Object.values(jobs).find((j) => j.path.endsWith(f.name));
+                  if (job?.status === 'done' && (job.output_path || job.doc_url)) {
+                    if (job.doc_url) {
+                      return (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0"
+                          title="Open in Google Docs"
+                          onClick={() => window.open(job.doc_url, '_blank')}
+                        >
+                          <ExternalLink className="size-4" />
+                        </Button>
+                      );
+                    }
+                    if (job.output_path) {
+                      return (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0"
+                          title="Open in file browser"
+                          onClick={async () => {
+                            try {
+                              await openPath(job.output_path);
+                            } catch (e) {
+                              alert((e as Error).message);
+                            }
+                          }}
+                        >
+                          <FolderOpen className="size-4" />
+                        </Button>
+                      );
+                    }
+                  }
+                  if (!processing) {
+                    return (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => removeFile(f.id)}
+                      >
+                        Remove
+                      </Button>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             ))}
           </CardContent>

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { getConfig, putConfig, type Config, type ConfigUpdate } from '@/api/client';
+import { FolderOpen } from 'lucide-react';
+import { getConfig, putConfig, openPath, type Config, type ConfigUpdate } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -65,13 +66,34 @@ export function Config() {
 
           <div className="space-y-2">
             <Label htmlFor="google_json">Google Service Account JSON (optional)</Label>
-            <Input
-              id="google_json"
-              type="text"
-              placeholder="/path/to/service-account.json"
-              value={values.google_service_account_json ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, google_service_account_json: e.target.value }))}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="google_json"
+                type="text"
+                placeholder="/path/to/service-account.json"
+                value={values.google_service_account_json ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, google_service_account_json: e.target.value }))}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Open in file browser"
+                disabled={!values.google_service_account_json?.trim()}
+                onClick={async () => {
+                  const path = values.google_service_account_json?.trim();
+                  if (!path) return;
+                  try {
+                    await openPath(path);
+                  } catch (e) {
+                    alert((e as Error).message);
+                  }
+                }}
+              >
+                <FolderOpen className="size-4" />
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -87,13 +109,32 @@ export function Config() {
 
           <div className="space-y-2">
             <Label htmlFor="md_dir">Markdown Output Directory</Label>
-            <Input
-              id="md_dir"
-              type="text"
-              placeholder="./output"
-              value={values.markdown_output_dir ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, markdown_output_dir: e.target.value }))}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="md_dir"
+                type="text"
+                placeholder="./output"
+                value={values.markdown_output_dir ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, markdown_output_dir: e.target.value }))}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Open in file browser"
+                onClick={async () => {
+                  const path = values.markdown_output_dir?.trim() || './output';
+                  try {
+                    await openPath(path);
+                  } catch (e) {
+                    alert((e as Error).message);
+                  }
+                }}
+              >
+                <FolderOpen className="size-4" />
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-3">

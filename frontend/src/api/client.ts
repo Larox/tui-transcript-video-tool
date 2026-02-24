@@ -88,6 +88,18 @@ export async function startTranscription(
   return res.json();
 }
 
+export async function openPath(path: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/paths/open`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to open path');
+  }
+}
+
 export type SSEEvent =
   | { type: 'job_status'; job: JobStatus }
   | { type: 'log'; message: string; level: string }
