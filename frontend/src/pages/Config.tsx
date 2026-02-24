@@ -1,7 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { getConfig, putConfig, type Config, type ConfigUpdate } from '../api/client';
-import './Config.css';
+import { getConfig, putConfig, type Config, type ConfigUpdate } from '@/api/client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export function Config() {
   const queryClient = useQueryClient();
@@ -36,110 +40,109 @@ export function Config() {
 
   const values = { ...config, ...form };
 
-  if (isLoading) return <div className="config-page">Loading...</div>;
-  if (error) return <div className="config-page error">Failed to load config: {(error as Error).message}</div>;
+  if (isLoading) return <div className="p-4">Loading...</div>;
+  if (error) return <div className="p-4 text-destructive">Failed to load config: {(error as Error).message}</div>;
 
   return (
-    <div className="config-page">
-      <h2>Settings</h2>
-      <p className="config-desc">Configure your Deepgram API key and optional Google Docs export.</p>
-
-      <form onSubmit={handleSubmit} className="config-form">
-        <div className="field">
-          <label htmlFor="deepgram">Deepgram API Key *</label>
-          <input
-            id="deepgram"
-            type="password"
-            placeholder="dg-..."
-            value={values.deepgram_api_key ?? ''}
-            onChange={(e) => setForm((f) => ({ ...f, deepgram_api_key: e.target.value }))}
-            required
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="google_json">Google Service Account JSON (optional)</label>
-          <input
-            id="google_json"
-            type="text"
-            placeholder="/path/to/service-account.json"
-            value={values.google_service_account_json ?? ''}
-            onChange={(e) => setForm((f) => ({ ...f, google_service_account_json: e.target.value }))}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="drive_folder">Google Drive Folder ID (optional)</label>
-          <input
-            id="drive_folder"
-            type="text"
-            placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
-            value={values.drive_folder_id ?? ''}
-            onChange={(e) => setForm((f) => ({ ...f, drive_folder_id: e.target.value }))}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="md_dir">Markdown Output Directory</label>
-          <input
-            id="md_dir"
-            type="text"
-            placeholder="./output"
-            value={values.markdown_output_dir ?? ''}
-            onChange={(e) => setForm((f) => ({ ...f, markdown_output_dir: e.target.value }))}
-          />
-        </div>
-
-        <div className="field">
-          <label>Naming Mode</label>
-          <div className="radio-group">
-            <label className="radio">
-              <input
-                type="radio"
-                name="naming"
-                value="sequential"
-                checked={(values.naming_mode ?? 'sequential') === 'sequential'}
-                onChange={() => setForm((f) => ({ ...f, naming_mode: 'sequential' }))}
-              />
-              Sequential (Prefix_1, Prefix_2, ...)
-            </label>
-            <label className="radio">
-              <input
-                type="radio"
-                name="naming"
-                value="original"
-                checked={values.naming_mode === 'original'}
-                onChange={() => setForm((f) => ({ ...f, naming_mode: 'original' }))}
-              />
-              Original (Prefix_FileName)
-            </label>
+    <Card>
+      <CardHeader>
+        <CardTitle>Settings</CardTitle>
+        <CardDescription>Configure your Deepgram API key and optional Google Docs export.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="deepgram">Deepgram API Key *</Label>
+            <Input
+              id="deepgram"
+              type="password"
+              placeholder="dg-..."
+              value={values.deepgram_api_key ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, deepgram_api_key: e.target.value }))}
+              required
+            />
           </div>
-        </div>
 
-        <div className="field">
-          <label htmlFor="prefix">Prefix</label>
-          <input
-            id="prefix"
-            type="text"
-            placeholder="Transcripcion"
-            value={values.prefix ?? ''}
-            onChange={(e) => setForm((f) => ({ ...f, prefix: e.target.value }))}
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="google_json">Google Service Account JSON (optional)</Label>
+            <Input
+              id="google_json"
+              type="text"
+              placeholder="/path/to/service-account.json"
+              value={values.google_service_account_json ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, google_service_account_json: e.target.value }))}
+            />
+          </div>
 
-        {config?.output_mode && (
-          <p className="output-mode">
-            Output: {config.output_mode === 'google_docs' ? 'Google Docs' : 'Local Markdown (.md)'}
-          </p>
-        )}
+          <div className="space-y-2">
+            <Label htmlFor="drive_folder">Google Drive Folder ID (optional)</Label>
+            <Input
+              id="drive_folder"
+              type="text"
+              placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+              value={values.drive_folder_id ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, drive_folder_id: e.target.value }))}
+            />
+          </div>
 
-        <button type="submit" className="btn-primary" disabled={mutation.isPending}>
-          {mutation.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save'}
-        </button>
-        {mutation.isError && (
-          <p className="form-error">{(mutation.error as Error).message}</p>
-        )}
-      </form>
-    </div>
+          <div className="space-y-2">
+            <Label htmlFor="md_dir">Markdown Output Directory</Label>
+            <Input
+              id="md_dir"
+              type="text"
+              placeholder="./output"
+              value={values.markdown_output_dir ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, markdown_output_dir: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <Label>Naming Mode</Label>
+            <RadioGroup
+              value={values.naming_mode ?? 'sequential'}
+              onValueChange={(v) => setForm((f) => ({ ...f, naming_mode: v }))}
+              className="flex flex-col gap-2"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="sequential" id="mode_seq" />
+                <Label htmlFor="mode_seq" className="font-normal cursor-pointer">
+                  Sequential (Prefix_1, Prefix_2, ...)
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="original" id="mode_orig" />
+                <Label htmlFor="mode_orig" className="font-normal cursor-pointer">
+                  Original (Prefix_FileName)
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="prefix">Prefix</Label>
+            <Input
+              id="prefix"
+              type="text"
+              placeholder="Transcripcion"
+              value={values.prefix ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, prefix: e.target.value }))}
+            />
+          </div>
+
+          {config?.output_mode && (
+            <p className="text-sm text-muted-foreground">
+              Output: {config.output_mode === 'google_docs' ? 'Google Docs' : 'Local Markdown (.md)'}
+            </p>
+          )}
+
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save'}
+          </Button>
+          {mutation.isError && (
+            <p className="text-sm text-destructive">{(mutation.error as Error).message}</p>
+          )}
+        </form>
+      </CardContent>
+    </Card>
   );
 }

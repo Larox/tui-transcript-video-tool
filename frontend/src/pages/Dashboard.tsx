@@ -9,8 +9,16 @@ import {
   type FileSpec,
   type SSEEvent,
   type JobStatus,
-} from '../api/client';
-import './Dashboard.css';
+} from '@/api/client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const LANGUAGES = [
   { code: 'es', name: 'Spanish' },
@@ -133,14 +141,18 @@ export function Dashboard() {
   };
 
   return (
-    <div className="dashboard">
-      <h2>Transcribe</h2>
-      <p className="dashboard-desc">
-        Output: {config?.output_mode === 'google_docs' ? 'Google Docs' : 'Local Markdown'}
-      </p>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Transcribe</h2>
+        <p className="text-sm text-muted-foreground">
+          Output: {config?.output_mode === 'google_docs' ? 'Google Docs' : 'Local Markdown'}
+        </p>
+      </div>
 
       <div
-        className={`dropzone ${dragOver ? 'drag-over' : ''} ${uploading ? 'uploading' : ''}`}
+        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+          dragOver ? 'border-primary bg-primary/10' : 'border-muted-foreground/30 hover:border-primary/50'
+        } ${uploading ? 'opacity-70 cursor-wait' : ''}`}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -152,78 +164,97 @@ export function Dashboard() {
           multiple
           accept=".mp4,.mkv,.mov,.avi,.webm,.m4a,.mp3,.wav,.ogg,.flac"
           onChange={(e) => handleFiles(e.target.files)}
-          style={{ display: 'none' }}
+          className="hidden"
         />
-        {uploading ? 'Uploading...' : 'Drop files here or click to browse'}
+        <p className="text-muted-foreground">
+          {uploading ? 'Uploading...' : 'Drop files here or click to browse'}
+        </p>
       </div>
 
       {files.length > 0 && (
-        <div className="file-list">
-          <h3>Files ({files.length})</h3>
-          {files.map((f) => (
-            <div key={f.id} className="file-row">
-              <span className="file-name">{f.name}</span>
-              <span className="file-size">{formatSize(f.size_bytes)}</span>
-              <select
-                value={f.language}
-                onChange={(e) => setFileLanguage(f.id, e.target.value)}
-                disabled={processing}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Files ({files.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {files.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-4 rounded-md border bg-card p-3 text-sm"
               >
-                {LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-              <span className="file-status">
-                {Object.values(jobs).find((j) => j.path.endsWith(f.name))?.status ?? 'pending'}
-              </span>
-              {!processing && (
-                <button
-                  type="button"
-                  className="btn-remove"
-                  onClick={() => removeFile(f.id)}
+                <span className="flex-1 truncate font-medium">{f.name}</span>
+                <span className="text-muted-foreground shrink-0">{formatSize(f.size_bytes)}</span>
+                <Select
+                  value={f.language}
+                  onValueChange={(v) => setFileLanguage(f.id, v)}
+                  disabled={processing}
                 >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+                  <SelectTrigger className="w-[140px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGES.map((l) => (
+                      <SelectItem key={l.code} value={l.code}>
+                        {l.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground capitalize shrink-0 w-24">
+                  {Object.values(jobs).find((j) => j.path.endsWith(f.name))?.status ?? 'pending'}
+                </span>
+                {!processing && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => removeFile(f.id)}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
-      <div className="actions">
-        <button
-          className="btn-primary"
+      <div className="flex gap-3">
+        <Button
           onClick={start}
           disabled={!files.length || processing}
         >
           {processing ? 'Processing...' : 'Start'}
-        </button>
-        <button
-          className="btn-secondary"
+        </Button>
+        <Button
+          variant="outline"
           onClick={clear}
           disabled={processing}
         >
           Clear
-        </button>
+        </Button>
       </div>
 
       {statusLabel && (
-        <p className="status-label">{statusLabel}</p>
+        <p className="text-sm text-muted-foreground">{statusLabel}</p>
       )}
 
       {logs.length > 0 && (
-        <div className="log-panel">
-          <h3>Logs</h3>
-          <div className="log-content">
-            {logs.map((msg, i) => (
-              <div key={i} className="log-line">
-                {msg}
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Logs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[200px] overflow-y-auto rounded-md border bg-muted/30 p-3 font-mono text-xs text-muted-foreground space-y-1">
+              {logs.map((msg, i) => (
+                <div key={i} className="break-all">
+                  {msg}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
