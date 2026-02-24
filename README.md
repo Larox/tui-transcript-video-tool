@@ -1,6 +1,6 @@
 # TUI Video-to-Docs
 
-Terminal UI application that transcribes video files using Deepgram and exports each transcription to Google Docs or local Markdown files.
+Terminal UI and web API for transcribing video/audio files using Deepgram and exporting to Google Docs or local Markdown files.
 
 ## Prerequisites
 
@@ -23,6 +23,8 @@ cp .env.example .env
 
 ## Usage
 
+### TUI (Terminal)
+
 ```bash
 uv run tui-transcript
 ```
@@ -32,3 +34,33 @@ uv run tui-transcript
 3. Add video files and press **Start** to transcribe.
 
 If Google credentials are not provided, transcriptions are saved as `.md` files in the output directory.
+
+### Web API
+
+```bash
+uv run tui-transcript-api
+```
+
+Starts the FastAPI server at `http://localhost:8000`. See [API docs](http://localhost:8000/docs).
+
+### React Frontend
+
+```bash
+# Install Node via mise (if not already)
+mise install
+
+# Start the API first (in one terminal)
+uv run tui-transcript-api
+
+# Start the frontend (in another terminal)
+cd frontend && npm run dev
+```
+
+Open `http://localhost:5173`. The frontend proxies API requests to the backend.
+
+**API Endpoints:**
+- `GET /api/config` – Get config (API key masked)
+- `PUT /api/config` – Update config
+- `POST /api/files/upload` – Upload video/audio files (multipart)
+- `POST /api/transcription/start` – Start transcription
+- `GET /api/transcription/progress/{session_id}` – SSE stream of progress

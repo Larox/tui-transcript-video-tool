@@ -8,3 +8,7 @@ dist/
 build/
 .cursor/
 tui_transcript.log
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import logging
-import traceback
 from pathlib import Path
 
 from textual import on, work
@@ -27,12 +25,13 @@ from tui_transcript.models import (
     NamingMode,
     OutputMode,
     VideoJob,
-    build_doc_title,
 )
 from tui_transcript.screens.config import ConfigScreen
 from tui_transcript.screens.file_picker import FilePickerScreen
-from tui_transcript.services.history import HistoryDB
-from tui_transcript.services.transcription import transcribe
+from tui_transcript.services.pipeline import (
+    LogLevel,
+    run_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +212,17 @@ class DashboardScreen(Screen):
 
     # --- Processing pipeline ---
 
+    def _log_with_level(self, msg: str, level: str = LogLevel.INFO) -> None:
+        """Write to TUI log with Rich markup based on level."""
+        markup = {
+            LogLevel.HIGHLIGHT: f"[bold cyan]{msg}[/]",
+            LogLevel.SUCCESS: f"[bold green]{msg}[/]",
+            LogLevel.WARNING: f"[bold yellow]{msg}[/]",
+            LogLevel.ERROR: f"[bold red]{msg}[/]",
+            LogLevel.DIM: f"[dim]{msg}[/]",
+        }.get(level, msg)
+        self._log(markup)
+
     @on(Button.Pressed, "#btn_start")
     def _start_processing(self) -> None:
         if self._processing:
@@ -238,144 +248,25 @@ class DashboardScreen(Screen):
 
         self._refresh_jobs()
 
-        exporter = self._get_exporter()
-        history = HistoryDB()
-        output_mode = self.config.output_mode.value
-        next_seq = history.get_next_sequential_number(self.config.prefix)
+        class TUIPipelineCallbacks:
+            def on_log(_, msg: str, level: str = LogLevel.INFO) -> None:
+                self._log_with_level(msg, level)
 
-        for idx, job in enumerate(pending):
-            source_path = str(job.path)
-
-            if history.is_already_processed(source_path, self.config.prefix, output_mode):
-                self._log(
-                    f"[bold magenta]Skipped:[/] {job.path.name} "
-                    f"(already processed with prefix '{self.config.prefix}')"
-                )
-                job.status = JobStatus.DONE
-                self._refresh_jobs()
-                progress.advance(2)
-                continue
-
-            step_done = 0
-            try:
-                # --- Transcribe ---
-                job.status = JobStatus.TRANSCRIBING
+            def on_job_status_changed(_, job: VideoJob) -> None:
                 self._refresh_jobs()
 
-                file_mb = job.path.stat().st_size / 1_048_576
-                lang_label = LANGUAGES.get(job.language, job.language)
-                status_label.update(
-                    f"Transcribing {job.path.name} ({file_mb:.0f} MB, {lang_label}) "
-                    f"[{idx + 1}/{total}]..."
-                )
-                self._log(
-                    f"[bold cyan]Transcribing:[/] {job.path.name} "
-                    f"({file_mb:.0f} MB, {lang_label})"
-                )
+            def on_progress_advance(_, steps: int = 1) -> None:
+                for _ in range(steps):
+                    progress.advance(1)
 
-                def _on_status(msg: str) -> None:
-                    self._log(f"  [dim]{msg}[/]")
+            def on_status_label(_, label: str) -> None:
+                status_label.update(label)
 
-                job.transcript = await transcribe(
-                    self.config.deepgram_api_key,
-                    job.path,
-                    language=job.language,
-                    on_status=_on_status,
-                )
-                progress.advance(1)
-                step_done = 1
+        await run_pipeline(
+            self.config,
+            self.jobs,
+            callbacks=TUIPipelineCallbacks(),
+        )
 
-                # --- Build title (with history-aware numbering) ---
-                seq_number: int | None = None
-                if self.config.naming_mode == NamingMode.SEQUENTIAL:
-                    seq_number = next_seq
-                    title = build_doc_title(self.config, job.path, next_seq)
-                else:
-                    title = build_doc_title(self.config, job.path, 0)
-                    suffix = 2
-                    base_title = title
-                    while history.get_output_title_exists(title, output_mode):
-                        title = f"{base_title}_{suffix}"
-                        suffix += 1
-
-                # --- Export ---
-                job.status = JobStatus.UPLOADING
-                self._refresh_jobs()
-
-                if self.config.output_mode == OutputMode.GOOGLE_DOCS:
-                    status_label.update(
-                        f"Uploading {title} to Google Docs [{idx + 1}/{total}]..."
-                    )
-                    self._log(f"[bold yellow]Uploading:[/] {title}")
-                    doc_id = await asyncio.to_thread(
-                        exporter.create_and_fill,
-                        title,
-                        self.config.drive_folder_id,
-                        job.transcript,
-                    )
-                    job.doc_id = doc_id
-                    job.doc_url = f"https://docs.google.com/document/d/{doc_id}"
-                    self._log(
-                        f"[bold green]Created:[/] {title} "
-                        f"(ID: {doc_id})"
-                    )
-                else:
-                    status_label.update(
-                        f"Saving {title}.md [{idx + 1}/{total}]..."
-                    )
-                    self._log(f"[bold yellow]Saving:[/] {title}.md")
-                    out_path = await asyncio.to_thread(
-                        exporter.export, title, job.transcript
-                    )
-                    job.output_path = str(out_path)
-                    self._log(
-                        f"[bold green]Saved:[/] {out_path}"
-                    )
-
-                progress.advance(1)
-                step_done = 2
-                job.status = JobStatus.DONE
-                self._refresh_jobs()
-
-                history.record(
-                    source_path=source_path,
-                    prefix=self.config.prefix,
-                    naming_mode=self.config.naming_mode.value,
-                    sequential_number=seq_number,
-                    output_title=title,
-                    output_mode=output_mode,
-                    output_path=job.output_path or None,
-                    doc_id=job.doc_id or None,
-                    doc_url=job.doc_url or None,
-                    language=job.language,
-                )
-
-                if self.config.naming_mode == NamingMode.SEQUENTIAL:
-                    next_seq += 1
-
-            except Exception as exc:
-                job.status = JobStatus.ERROR
-                job.error = str(exc)
-                self._refresh_jobs()
-                progress.advance(2 - step_done)
-
-                tb = traceback.format_exc()
-                self._log(
-                    f"[bold red]Error:[/] {job.path.name} — {exc}"
-                )
-                self._log(f"[dim red]{tb}[/]")
-                logger.error("Job failed for %s:\n%s", job.path.name, tb)
-
-        history.close()
-        status_label.update("Done!")
-        self._log("[bold green]All tasks completed.[/]")
         btn.disabled = False
         self._processing = False
-
-    def _get_exporter(self):
-        if self.config.output_mode == OutputMode.GOOGLE_DOCS:
-            from tui_transcript.services.google_docs import GoogleDocsService
-            return GoogleDocsService(self.config.google_service_account_json)
-        else:
-            from tui_transcript.services.markdown_export import MarkdownExporter
-            return MarkdownExporter(self.config.markdown_output_dir)

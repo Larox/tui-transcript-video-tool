@@ -9,10 +9,14 @@ dependencies = [
     "google-api-python-client",
     "google-auth",
     "python-dotenv",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
 ]
 
 [project.scripts]
 tui-transcript = "tui_transcript.app:main"
+tui-transcript-api = "tui_transcript.api.main:run"
 
 [build-system]
 requires = ["hatchling"]

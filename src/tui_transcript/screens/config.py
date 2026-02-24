@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dotenv import dotenv_values, set_key
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Center, Horizontal, Vertical, VerticalScroll
@@ -20,20 +19,7 @@ from textual.widgets import (
 
 from tui_transcript.models import AppConfig, NamingMode
 from tui_transcript.screens.file_picker import DirPickerScreen
-
-ENV_PATH = Path(".env")
-
-
-def _load_env() -> dict[str, str]:
-    if ENV_PATH.exists():
-        return {k: (v or "") for k, v in dotenv_values(ENV_PATH).items()}
-    return {}
-
-
-def _save_env(key: str, value: str) -> None:
-    if not ENV_PATH.exists():
-        ENV_PATH.touch()
-    set_key(str(ENV_PATH), key, value)
+from tui_transcript.services.config_store import EnvConfigStore
 
 
 class ConfigScreen(Screen):
@@ -45,13 +31,14 @@ class ConfigScreen(Screen):
         self._md_output_dir = ""
 
     def compose(self) -> ComposeResult:
-        env = _load_env()
+        config_store = EnvConfigStore()
+        config = config_store.load()
 
         yield Header(show_clock=True)
         with VerticalScroll(id="config-scroll"):
             yield Label("Deepgram API Key *", classes="field-label")
             yield Input(
-                value=env.get("DEEPGRAM_API_KEY", ""),
+                value=config.deepgram_api_key,
                 placeholder="dg-...",
                 password=True,
                 id="deepgram_key",
@@ -63,7 +50,7 @@ class ConfigScreen(Screen):
                 classes="field-label",
             )
             yield Input(
-                value=env.get("GOOGLE_SERVICE_ACCOUNT_JSON", ""),
+                value=config.google_service_account_json,
                 placeholder="/path/to/service-account.json",
                 id="google_json",
             )
@@ -72,7 +59,7 @@ class ConfigScreen(Screen):
                 "Google Drive Folder ID (optional)", classes="field-label"
             )
             yield Input(
-                value=env.get("DRIVE_FOLDER_ID", ""),
+                value=config.drive_folder_id,
                 placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ",
                 id="drive_folder",
             )
@@ -81,14 +68,14 @@ class ConfigScreen(Screen):
             yield Label(
                 "Markdown Output Directory", classes="field-label"
             )
-            self._md_output_dir = env.get("MARKDOWN_OUTPUT_DIR", "./output")
+            self._md_output_dir = config.markdown_output_dir
             with Horizontal(id="md-output-row"):
                 yield Label(self._md_output_dir, id="md_output_dir_label")
                 yield Button("Browse", variant="primary", id="btn_md_browse")
 
             yield Static(" ")
             yield Label("Naming Mode", classes="field-label")
-            saved_mode = env.get("NAMING_MODE", "sequential")
+            saved_mode = config.naming_mode.value
             with RadioSet(id="naming_mode"):
                 yield RadioButton(
                     "Sequential  (Prefix_1, Prefix_2, ...)",
@@ -103,7 +90,7 @@ class ConfigScreen(Screen):
 
             yield Label("Prefix", classes="field-label")
             yield Input(
-                value=env.get("PREFIX", "Transcripcion"),
+                value=config.prefix,
                 placeholder="Transcripcion",
                 id="prefix",
             )
@@ -168,13 +155,6 @@ class ConfigScreen(Screen):
         if radio_set.pressed_index == 1:
             naming = NamingMode.ORIGINAL
 
-        _save_env("DEEPGRAM_API_KEY", dg_key)
-        _save_env("GOOGLE_SERVICE_ACCOUNT_JSON", gj)
-        _save_env("DRIVE_FOLDER_ID", df)
-        _save_env("NAMING_MODE", naming.value)
-        _save_env("PREFIX", prefix)
-        _save_env("MARKDOWN_OUTPUT_DIR", md_dir)
-
         config = AppConfig(
             deepgram_api_key=dg_key,
             google_service_account_json=gj,
@@ -184,6 +164,7 @@ class ConfigScreen(Screen):
             markdown_output_dir=md_dir,
         )
 
+        EnvConfigStore().save(config)
         self.app.config = config  # type: ignore[attr-defined]
         if self._is_revisit:
             self.app.pop_screen()
