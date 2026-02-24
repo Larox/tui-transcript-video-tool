@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from tui_transcript.models import AppConfig, NamingMode
+from tui_transcript.models import NamingMode
 from tui_transcript.services.config_store import EnvConfigStore
 
 from tui_transcript.api.schemas import ConfigResponse, ConfigUpdate
