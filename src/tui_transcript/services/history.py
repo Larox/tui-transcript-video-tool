@@ -22,6 +22,13 @@ CREATE TABLE IF NOT EXISTS processed_videos (
     language          TEXT,
     processed_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS output_directories (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    path       TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -108,6 +115,65 @@ class HistoryDB:
             ),
         )
         self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # Output directories
+    # ------------------------------------------------------------------
+
+    def register_directory(self, name: str, path: str) -> int:
+        """Register an output directory. Returns its id.
+
+        If *path* is already registered, returns the existing row id.
+        """
+        row = self._conn.execute(
+            "SELECT id FROM output_directories WHERE path = ?", (path,)
+        ).fetchone()
+        if row is not None:
+            return row[0]
+        cur = self._conn.execute(
+            "INSERT INTO output_directories (name, path) VALUES (?, ?)",
+            (name, path),
+        )
+        self._conn.commit()
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def unregister_directory(self, dir_id: int) -> bool:
+        """Remove a directory registration. Returns True if a row was deleted."""
+        cur = self._conn.execute(
+            "DELETE FROM output_directories WHERE id = ?", (dir_id,)
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def update_directory_path(self, dir_id: int, new_path: str) -> bool:
+        """Re-attach a directory to a new filesystem path."""
+        cur = self._conn.execute(
+            "UPDATE output_directories SET path = ? WHERE id = ?",
+            (new_path, dir_id),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def list_directories(self) -> list[dict]:
+        """Return all registered directories as dicts."""
+        cur = self._conn.execute(
+            "SELECT id, name, path, created_at FROM output_directories "
+            "ORDER BY created_at"
+        )
+        return [
+            {"id": r[0], "name": r[1], "path": r[2], "created_at": r[3]}
+            for r in cur.fetchall()
+        ]
+
+    def get_directory(self, dir_id: int) -> dict | None:
+        """Return a single directory by id, or None."""
+        row = self._conn.execute(
+            "SELECT id, name, path, created_at FROM output_directories WHERE id = ?",
+            (dir_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"id": row[0], "name": row[1], "path": row[2], "created_at": row[3]}
 
     # ------------------------------------------------------------------
     # Lifecycle

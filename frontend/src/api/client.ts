@@ -100,6 +100,136 @@ export async function openPath(path: string): Promise<void> {
   }
 }
 
+// ------------------------------------------------------------------
+// Document storage
+// ------------------------------------------------------------------
+
+export interface DirectoryEntry {
+  id: number;
+  name: string;
+  path: string;
+  exists: boolean;
+  file_count: number;
+  created_at: string;
+}
+
+export interface DocumentFile {
+  name: string;
+  size_bytes: number;
+  modified_at: string;
+}
+
+export async function getDirectories(): Promise<DirectoryEntry[]> {
+  const res = await fetch(`${API_BASE}/documents/directories`);
+  if (!res.ok) throw new Error('Failed to fetch directories');
+  return res.json();
+}
+
+export async function createDirectory(
+  name: string,
+  path: string
+): Promise<DirectoryEntry> {
+  const res = await fetch(`${API_BASE}/documents/directories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, path }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to register directory');
+  }
+  return res.json();
+}
+
+export async function updateDirectory(
+  id: number,
+  path: string
+): Promise<DirectoryEntry> {
+  const res = await fetch(`${API_BASE}/documents/directories/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to update directory');
+  }
+  return res.json();
+}
+
+export async function deleteDirectory(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/documents/directories/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to delete directory');
+  }
+}
+
+export async function getDirectoryFiles(id: number): Promise<DocumentFile[]> {
+  const res = await fetch(`${API_BASE}/documents/directories/${id}/files`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to fetch files');
+  }
+  return res.json();
+}
+
+export async function openDirectory(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/documents/directories/${id}/open`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to open directory');
+  }
+}
+
+// ------------------------------------------------------------------
+// Native OS directory picker
+// ------------------------------------------------------------------
+
+export async function pickDirectory(): Promise<string | null> {
+  const res = await fetch(`${API_BASE}/paths/pick-directory`, { method: 'POST' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to open directory picker');
+  }
+  const data = await res.json();
+  return data.path ?? null;
+}
+
+// ------------------------------------------------------------------
+// Filesystem browsing
+// ------------------------------------------------------------------
+
+export interface BrowseEntry {
+  name: string;
+  path: string;
+  has_children: boolean;
+}
+
+export interface BrowseResponse {
+  current: string;
+  parent: string | null;
+  children: BrowseEntry[];
+}
+
+export async function browseDirectory(path?: string): Promise<BrowseResponse> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : '';
+  const res = await fetch(`${API_BASE}/paths/browse${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to browse directory');
+  }
+  return res.json();
+}
+
+// ------------------------------------------------------------------
+// SSE / Transcription progress
+// ------------------------------------------------------------------
+
 export type SSEEvent =
   | { type: 'job_status'; job: JobStatus }
   | { type: 'log'; message: string; level: string }

@@ -94,3 +94,61 @@ class DoneEvent(BaseModel):
     """SSE event: pipeline complete."""
 
     type: str = "done"
+
+
+# ------------------------------------------------------------------
+# Document storage
+# ------------------------------------------------------------------
+
+
+class DirectoryEntry(BaseModel):
+    """A registered output directory with runtime status."""
+
+    id: int
+    name: str
+    path: str
+    exists: bool
+    file_count: int
+    created_at: str
+
+
+class DirectoryCreate(BaseModel):
+    """Payload for registering a new output directory."""
+
+    name: str = Field(..., min_length=1)
+    path: str = Field(..., min_length=1)
+
+
+class DirectoryUpdate(BaseModel):
+    """Payload for re-attaching a directory to a new path."""
+
+    path: str = Field(..., min_length=1)
+
+
+class DocumentFile(BaseModel):
+    """A single document file inside a registered directory."""
+
+    name: str
+    size_bytes: int
+    modified_at: str
+
+
+# ------------------------------------------------------------------
+# Filesystem browsing
+# ------------------------------------------------------------------
+
+
+class BrowseEntry(BaseModel):
+    """A single subdirectory entry returned by the browse endpoint."""
+
+    name: str
+    path: str
+    has_children: bool
+
+
+class BrowseResponse(BaseModel):
+    """Response from GET /api/paths/browse."""
+
+    current: str
+    parent: str | None
+    children: list[BrowseEntry]

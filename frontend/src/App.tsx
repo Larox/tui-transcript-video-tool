@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Mic, Settings } from 'lucide-react';
+import { FolderOpen, Mic, Settings } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Config } from '@/pages/Config';
 import { Dashboard } from '@/pages/Dashboard';
+import { Documents } from '@/pages/Documents';
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,14 @@ function AppSidebar() {
                   <NavLink to="/" end>
                     <Mic className="size-4" />
                     <span>Transcribe</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.pathname === '/documents'}>
+                  <NavLink to="/documents">
+                    <FolderOpen className="size-4" />
+                    <span>Documents</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -74,6 +83,7 @@ function App() {
             <main className="flex-1 p-6 max-w-3xl">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/documents" element={<Documents />} />
                 <Route path="/config" element={<Config />} />
               </Routes>
             </main>

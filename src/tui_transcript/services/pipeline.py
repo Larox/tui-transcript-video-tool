@@ -18,6 +18,7 @@ from tui_transcript.models import (
     VideoJob,
     build_doc_title,
 )
+from tui_transcript.services.document_store import DocumentStore
 from tui_transcript.services.history import HistoryDB
 from tui_transcript.services.transcription import transcribe
 
@@ -192,6 +193,10 @@ async def run_pipeline(
                     doc_url=job.doc_url or None,
                     language=job.language,
                 )
+
+                if config.output_mode == OutputMode.MARKDOWN:
+                    doc_store = DocumentStore(db=history)
+                    doc_store.ensure_registered(config.markdown_output_dir)
 
                 if config.naming_mode == NamingMode.SEQUENTIAL:
                     next_seq += 1

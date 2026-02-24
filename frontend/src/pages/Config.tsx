@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { FolderOpen } from 'lucide-react';
-import { getConfig, putConfig, openPath, type Config, type ConfigUpdate } from '@/api/client';
+import { FolderOpen, FolderSearch } from 'lucide-react';
+import { getConfig, putConfig, openPath, pickDirectory, type Config, type ConfigUpdate } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -121,8 +121,25 @@ export function Config() {
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
+                title="Browse for directory"
+                onClick={async () => {
+                  try {
+                    const picked = await pickDirectory();
+                    if (picked) setForm((f) => ({ ...f, markdown_output_dir: picked }));
+                  } catch (e) {
+                    alert((e as Error).message);
+                  }
+                }}
+              >
+                <FolderSearch className="size-4 mr-1.5" />
+                Browse
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
                 size="icon"
-                title="Open in file browser"
+                title="Open in file manager"
                 onClick={async () => {
                   const path = values.markdown_output_dir?.trim() || './output';
                   try {
