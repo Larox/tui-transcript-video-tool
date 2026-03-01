@@ -95,6 +95,13 @@ class ConfigScreen(Screen):
                 id="prefix",
             )
 
+            yield Label("Course Name *", classes="field-label")
+            yield Input(
+                value=config.course_name,
+                placeholder="Introduction to Python",
+                id="course_name",
+            )
+
             yield Static(" ")
             yield Label("", id="output_mode_label")
 
@@ -149,6 +156,14 @@ class ConfigScreen(Screen):
         df = self.query_one("#drive_folder", Input).value.strip()
         md_dir = self._md_output_dir.strip() or "./output"
         prefix = self.query_one("#prefix", Input).value.strip() or "Transcripcion"
+        course_name = self.query_one("#course_name", Input).value.strip()
+
+        if not gj and not df and not course_name:
+            self.notify(
+                "Course Name is required when using Markdown output",
+                severity="error",
+            )
+            return
 
         radio_set = self.query_one("#naming_mode", RadioSet)
         naming = NamingMode.SEQUENTIAL
@@ -162,6 +177,7 @@ class ConfigScreen(Screen):
             naming_mode=naming,
             prefix=prefix,
             markdown_output_dir=md_dir,
+            course_name=course_name,
         )
 
         EnvConfigStore().save(config)

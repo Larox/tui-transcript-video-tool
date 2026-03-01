@@ -31,6 +31,7 @@ def get_config() -> ConfigResponse:
         drive_folder_id=config.drive_folder_id,
         naming_mode=config.naming_mode.value,
         prefix=config.prefix,
+        course_name=config.course_name,
         markdown_output_dir=config.markdown_output_dir,
         output_mode=config.output_mode.value,
     )
@@ -55,8 +56,17 @@ def put_config(update: ConfigUpdate) -> dict:
             raise HTTPException(400, f"Invalid naming_mode: {update.naming_mode}")
     if update.prefix is not None:
         config.prefix = update.prefix
+    if update.course_name is not None:
+        config.course_name = update.course_name
     if update.markdown_output_dir is not None:
         config.markdown_output_dir = update.markdown_output_dir
+
+    if not config.google_service_account_json or not config.drive_folder_id:
+        if not config.course_name.strip():
+            raise HTTPException(
+                400,
+                "Course name is required when using Markdown output",
+            )
 
     store.save(config)
     return {"ok": True}

@@ -51,6 +51,7 @@ class EnvConfigStore:
             naming_mode=naming,
             prefix=env.get("PREFIX", "Transcripcion"),
             markdown_output_dir=env.get("MARKDOWN_OUTPUT_DIR", "./output"),
+            course_name=env.get("COURSE_NAME", ""),
         )
 
     def save(self, config: AppConfig) -> None:
@@ -60,3 +61,4 @@ class EnvConfigStore:
         _save_env("NAMING_MODE", config.naming_mode.value)
         _save_env("PREFIX", config.prefix)
         _save_env("MARKDOWN_OUTPUT_DIR", config.markdown_output_dir)
+        _save_env("COURSE_NAME", config.course_name)

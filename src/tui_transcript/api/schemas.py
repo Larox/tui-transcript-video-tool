@@ -13,6 +13,7 @@ class ConfigResponse(BaseModel):
     drive_folder_id: str = ""
     naming_mode: str = "sequential"
     prefix: str = "Transcripcion"
+    course_name: str = ""
     markdown_output_dir: str = "./output"
     output_mode: str = "markdown"
 
@@ -25,6 +26,7 @@ class ConfigUpdate(BaseModel):
     drive_folder_id: str | None = None
     naming_mode: str | None = None
     prefix: str | None = None
+    course_name: str | None = None
     markdown_output_dir: str | None = None
 
 

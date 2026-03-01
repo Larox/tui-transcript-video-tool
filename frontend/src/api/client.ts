@@ -6,6 +6,7 @@ export interface Config {
   drive_folder_id: string;
   naming_mode: string;
   prefix: string;
+  course_name: string;
   markdown_output_dir: string;
   output_mode: string;
 }
@@ -16,6 +17,7 @@ export interface ConfigUpdate {
   drive_folder_id?: string;
   naming_mode?: string;
   prefix?: string;
+  course_name?: string;
   markdown_output_dir?: string;
 }
 

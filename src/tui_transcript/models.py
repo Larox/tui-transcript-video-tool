@@ -46,6 +46,7 @@ class AppConfig:
     naming_mode: NamingMode = NamingMode.SEQUENTIAL
     prefix: str = "Transcripcion"
     markdown_output_dir: str = "./output"
+    course_name: str = ""
 
     @property
     def output_mode(self) -> OutputMode:

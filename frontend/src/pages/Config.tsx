@@ -29,17 +29,24 @@ export function Config() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isMarkdownOutput && !(values.course_name ?? '').trim()) {
+      alert('Course Name is required when using Markdown output.');
+      return;
+    }
     const update: ConfigUpdate = {};
     if (form.deepgram_api_key !== undefined) update.deepgram_api_key = form.deepgram_api_key;
     if (form.google_service_account_json !== undefined) update.google_service_account_json = form.google_service_account_json;
     if (form.drive_folder_id !== undefined) update.drive_folder_id = form.drive_folder_id;
     if (form.naming_mode !== undefined) update.naming_mode = form.naming_mode;
     if (form.prefix !== undefined) update.prefix = form.prefix;
+    if (form.course_name !== undefined) update.course_name = form.course_name;
     if (form.markdown_output_dir !== undefined) update.markdown_output_dir = form.markdown_output_dir;
     mutation.mutate(update);
   };
 
   const values = { ...config, ...form };
+
+  const isMarkdownOutput = config?.output_mode === 'markdown';
 
   if (isLoading) return <div className="p-4">Loading...</div>;
   if (error) return <div className="p-4 text-destructive">Failed to load config: {(error as Error).message}</div>;
@@ -184,6 +191,18 @@ export function Config() {
               placeholder="Transcripcion"
               value={values.prefix ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, prefix: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="course_name">Course Name {isMarkdownOutput && '*'}</Label>
+            <Input
+              id="course_name"
+              type="text"
+              placeholder="Introduction to Python"
+              value={values.course_name ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, course_name: e.target.value }))}
+              required={isMarkdownOutput}
             />
           </div>
 

@@ -6,6 +6,7 @@ import asyncio
 import logging
 import traceback
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -20,6 +21,7 @@ from tui_transcript.models import (
 )
 from tui_transcript.services.document_store import DocumentStore
 from tui_transcript.services.history import HistoryDB
+from tui_transcript.services.media_utils import get_media_duration_seconds
 from tui_transcript.services.transcription import transcribe
 
 logger = logging.getLogger(__name__)
@@ -170,8 +172,20 @@ async def run_pipeline(
                         f"Saving {title}.md [{idx + 1}/{len(pending)}]..."
                     )
                     cb.on_log(f"Saving: {title}.md", level=LogLevel.HIGHLIGHT)
+                    date_str = datetime.fromtimestamp(
+                        job.path.stat().st_mtime
+                    ).date().isoformat()
+                    duration_sec = get_media_duration_seconds(job.path)
+                    duration_min: int | None = None
+                    if duration_sec is not None:
+                        duration_min = max(1, round(duration_sec / 60))
                     out_path = await asyncio.to_thread(
-                        exporter.export, title, job.transcript
+                        exporter.export,
+                        title,
+                        job.transcript,
+                        date=date_str,
+                        course_name=config.course_name,
+                        duration_minutes=duration_min,
                     )
                     job.output_path = str(out_path)
                     cb.on_log(f"Saved: {out_path}", level=LogLevel.SUCCESS)
