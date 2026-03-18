@@ -11,8 +11,9 @@ import {
   type FileSpec,
   type SSEEvent,
   type JobStatus,
+  type KeyMoment,
 } from '@/api/client';
-import { FolderOpen, ExternalLink, Loader2 } from 'lucide-react';
+import { FolderOpen, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -42,6 +43,7 @@ export function Dashboard() {
   const [statusLabel, setStatusLabel] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
   const [jobs, setJobs] = useState<Record<string, JobStatus>>({});
+  const [expandedMoments, setExpandedMoments] = useState<Record<string, boolean>>({});
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -168,9 +170,7 @@ export function Dashboard() {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Transcribe</h2>
-        <p className="text-sm text-muted-foreground">
-          Output: {config?.output_mode === 'google_docs' ? 'Google Docs' : 'Local Markdown'}
-        </p>
+        <p className="text-sm text-muted-foreground">Output: Local Markdown</p>
       </div>
 
       <div
@@ -205,8 +205,8 @@ export function Dashboard() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {files.map((f) => (
+                    <div key={f.id} className="flex flex-col">
                     <div
-                      key={f.id}
                       className="flex items-center gap-4 rounded-md border bg-card p-3 text-sm"
                     >
                       <span className="flex-1 truncate font-medium">{f.name}</span>
@@ -253,41 +253,25 @@ export function Dashboard() {
                       })()}
                       {(() => {
                         const job = Object.values(jobs).find((j) => j.path.endsWith(f.name));
-                        if (job?.status === 'done' && (job.output_path || job.doc_url)) {
-                          if (job.doc_url) {
-                            return (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="shrink-0"
-                                title="Open in Google Docs"
-                                onClick={() => window.open(job.doc_url, '_blank')}
-                              >
-                                <ExternalLink className="size-4" />
-                              </Button>
-                            );
-                          }
-                          if (job.output_path) {
-                            return (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="shrink-0"
-                                title="Open in file browser"
-                                onClick={async () => {
-                                  try {
-                                    await openPath(job.output_path);
-                                  } catch (e) {
-                                    alert((e as Error).message);
-                                  }
-                                }}
-                              >
-                                <FolderOpen className="size-4" />
-                              </Button>
-                            );
-                          }
+                        if (job?.status === 'done' && job.output_path) {
+                          return (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0"
+                              title="Open in file browser"
+                              onClick={async () => {
+                                try {
+                                  await openPath(job.output_path);
+                                } catch (e) {
+                                  alert((e as Error).message);
+                                }
+                              }}
+                            >
+                              <FolderOpen className="size-4" />
+                            </Button>
+                          );
                         }
                         if (!processing) {
                           return (
@@ -304,6 +288,51 @@ export function Dashboard() {
                         }
                         return null;
                       })()}
+                      {(() => {
+                        const job = Object.values(jobs).find((j) => j.path.endsWith(f.name));
+                        if (job?.status === 'done' && (job?.key_moments?.length ?? 0) > 0) {
+                          return (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0"
+                              title="View key moments"
+                              onClick={() =>
+                                setExpandedMoments((p) => ({
+                                  ...p,
+                                  [f.id]: !p[f.id],
+                                }))
+                              }
+                            >
+                              <Sparkles className="size-4" />
+                            </Button>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                    {(() => {
+                      const job = Object.values(jobs).find((j) => j.path.endsWith(f.name));
+                      if (expandedMoments[f.id] && (job?.key_moments?.length ?? 0) > 0) {
+                        return (
+                          <div className="mt-1.5 rounded-md border bg-muted/30 p-3 space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Key Moments
+                            </p>
+                            {job!.key_moments.map((m: KeyMoment, i: number) => (
+                              <div key={i} className="flex gap-2.5 text-sm">
+                                <span className="font-mono text-muted-foreground shrink-0">
+                                  {m.timestamp}
+                                </span>
+                                <span>{m.description}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     </div>
                   ))}
                 </CardContent>

@@ -18,9 +18,23 @@ class JobStatus(Enum):
     ERROR = "error"
 
 
-class OutputMode(Enum):
-    GOOGLE_DOCS = "google_docs"
-    MARKDOWN = "markdown"
+@dataclass
+class TranscriptParagraph:
+    start: float
+    end: float
+    text: str
+
+
+@dataclass
+class TranscriptResult:
+    text: str
+    paragraphs: list[TranscriptParagraph] = field(default_factory=list)
+
+
+@dataclass
+class KeyMoment:
+    timestamp: str   # "H:MM:SS"
+    description: str
 
 
 LANGUAGES: dict[str, str] = {
@@ -41,18 +55,11 @@ LANGUAGES: dict[str, str] = {
 @dataclass
 class AppConfig:
     deepgram_api_key: str = ""
-    google_service_account_json: str = ""
-    drive_folder_id: str = ""
     naming_mode: NamingMode = NamingMode.SEQUENTIAL
     prefix: str = "Transcripcion"
     markdown_output_dir: str = "./output"
     course_name: str = ""
-
-    @property
-    def output_mode(self) -> OutputMode:
-        if self.google_service_account_json and self.drive_folder_id:
-            return OutputMode.GOOGLE_DOCS
-        return OutputMode.MARKDOWN
+    anthropic_api_key: str = ""
 
 
 @dataclass
@@ -62,10 +69,9 @@ class VideoJob:
     status: JobStatus = JobStatus.PENDING
     progress: float = 0.0
     transcript: str = ""
-    doc_id: str = ""
-    doc_url: str = ""
     output_path: str = ""
     error: str = ""
+    key_moments: list[KeyMoment] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Serialize for API/JSON. Path becomes string."""
@@ -75,10 +81,12 @@ class VideoJob:
             "status": self.status.value,
             "progress": self.progress,
             "transcript": self.transcript,
-            "doc_id": self.doc_id,
-            "doc_url": self.doc_url,
             "output_path": self.output_path,
             "error": self.error,
+            "key_moments": [
+                {"timestamp": m.timestamp, "description": m.description}
+                for m in self.key_moments
+            ],
         }
 
     @classmethod
@@ -93,10 +101,11 @@ class VideoJob:
             status=JobStatus(data.get("status", JobStatus.PENDING.value)),
             progress=data.get("progress", 0.0),
             transcript=data.get("transcript", ""),
-            doc_id=data.get("doc_id", ""),
-            doc_url=data.get("doc_url", ""),
             output_path=data.get("output_path", ""),
             error=data.get("error", ""),
+            key_moments=[
+                KeyMoment(**m) for m in data.get("key_moments", [])
+            ],
         )
 
 

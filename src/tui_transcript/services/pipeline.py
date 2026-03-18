@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import traceback
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -15,13 +16,13 @@ from tui_transcript.models import (
     JobStatus,
     LANGUAGES,
     NamingMode,
-    OutputMode,
     VideoJob,
     build_doc_title,
 )
 from tui_transcript.services.document_store import DocumentStore
 from tui_transcript.services.history import HistoryDB
 from tui_transcript.services.media_utils import get_media_duration_seconds
+from tui_transcript.services.key_moments import extract_key_moments
 from tui_transcript.services.transcription import transcribe
 
 logger = logging.getLogger(__name__)
@@ -64,14 +65,6 @@ class DefaultPipelineCallbacks:
         pass
 
 
-def _get_exporter(config: AppConfig):
-    if config.output_mode == OutputMode.GOOGLE_DOCS:
-        from tui_transcript.services.google_docs import GoogleDocsService
-        return GoogleDocsService(config.google_service_account_json)
-    from tui_transcript.services.markdown_export import MarkdownExporter
-    return MarkdownExporter(config.markdown_output_dir)
-
-
 async def run_pipeline(
     config: AppConfig,
     jobs: list[VideoJob],
@@ -86,9 +79,10 @@ async def run_pipeline(
     if not pending:
         return
 
-    exporter = _get_exporter(config)
+    from tui_transcript.services.markdown_export import MarkdownExporter
+    exporter = MarkdownExporter(config.markdown_output_dir)
     history = HistoryDB()
-    output_mode = config.output_mode.value
+    output_mode = "markdown"
     next_seq = history.get_next_sequential_number(config.prefix)
 
     try:
@@ -101,8 +95,6 @@ async def run_pipeline(
                 )
                 if record:
                     job.output_path = record.get("output_path", "") or ""
-                    job.doc_id = record.get("doc_id", "") or ""
-                    job.doc_url = record.get("doc_url", "") or ""
                 cb.on_log(
                     f"Skipped: {job.path.name} "
                     f"(already processed with prefix '{config.prefix}')",
@@ -136,12 +128,28 @@ async def run_pipeline(
                 def _on_status(msg: str) -> None:
                     cb.on_log(f"  {msg}", level=LogLevel.DIM)
 
-                job.transcript = await transcribe(
+                transcript_result = await transcribe(
                     config.deepgram_api_key,
                     job.path,
                     language=job.language,
                     on_status=_on_status,
                 )
+                job.transcript = transcript_result.text
+
+                # --- Key Moments extraction (optional, requires ANTHROPIC_API_KEY) ---
+                key_moments_dicts: list[dict] = []
+                if config.anthropic_api_key and transcript_result.paragraphs:
+                    cb.on_log("  Extracting key moments with Claude...", level=LogLevel.DIM)
+                    job.key_moments = await extract_key_moments(
+                        config.anthropic_api_key,
+                        transcript_result.paragraphs,
+                    )
+                    key_moments_dicts = [
+                        {"timestamp": m.timestamp, "description": m.description}
+                        for m in job.key_moments
+                    ]
+                    cb.on_job_status_changed(job)
+
                 cb.on_progress_advance(1)
                 step_done = 1
 
@@ -158,47 +166,38 @@ async def run_pipeline(
                         title = f"{base_title}_{suffix}"
                         suffix += 1
 
+                highlights_slug: str | None = None
+
                 # --- Export ---
                 job.status = JobStatus.UPLOADING
                 job.progress = 0.8
                 cb.on_job_status_changed(job)
 
-                if config.output_mode == OutputMode.GOOGLE_DOCS:
-                    cb.on_status_label(
-                        f"Uploading {title} to Google Docs [{idx + 1}/{len(pending)}]..."
-                    )
-                    cb.on_log(f"Uploading: {title}", level=LogLevel.HIGHLIGHT)
-                    doc_id = await asyncio.to_thread(
-                        exporter.create_and_fill,
-                        title,
-                        config.drive_folder_id,
-                        job.transcript,
-                    )
-                    job.doc_id = doc_id
-                    job.doc_url = f"https://docs.google.com/document/d/{doc_id}"
-                    cb.on_log(f"Created: {title} (ID: {doc_id})", level=LogLevel.SUCCESS)
-                else:
-                    cb.on_status_label(
-                        f"Saving {title}.md [{idx + 1}/{len(pending)}]..."
-                    )
-                    cb.on_log(f"Saving: {title}.md", level=LogLevel.HIGHLIGHT)
-                    date_str = datetime.fromtimestamp(
-                        job.path.stat().st_mtime
-                    ).date().isoformat()
-                    duration_sec = get_media_duration_seconds(job.path)
-                    duration_min: int | None = None
-                    if duration_sec is not None:
-                        duration_min = max(1, round(duration_sec / 60))
-                    out_path = await asyncio.to_thread(
-                        exporter.export,
-                        title,
-                        job.transcript,
-                        date=date_str,
-                        course_name=config.course_name,
-                        duration_minutes=duration_min,
-                    )
-                    job.output_path = str(out_path)
-                    cb.on_log(f"Saved: {out_path}", level=LogLevel.SUCCESS)
+                cb.on_status_label(
+                    f"Saving {title}.md [{idx + 1}/{len(pending)}]..."
+                )
+                cb.on_log(f"Saving: {title}.md", level=LogLevel.HIGHLIGHT)
+                date_str = datetime.fromtimestamp(
+                    job.path.stat().st_mtime
+                ).date().isoformat()
+                duration_sec = get_media_duration_seconds(job.path)
+                duration_min: int | None = None
+                if duration_sec is not None:
+                    duration_min = max(1, round(duration_sec / 60))
+                if key_moments_dicts:
+                    highlights_slug = str(uuid.uuid4())
+                out_path = await asyncio.to_thread(
+                    exporter.export,
+                    title,
+                    job.transcript,
+                    date=date_str,
+                    course_name=config.course_name,
+                    duration_minutes=duration_min,
+                    key_moments=key_moments_dicts or None,
+                    highlights_id=highlights_slug,
+                )
+                job.output_path = str(out_path)
+                cb.on_log(f"Saved: {out_path}", level=LogLevel.SUCCESS)
 
                 cb.on_progress_advance(1)
                 step_done = 2
@@ -214,14 +213,19 @@ async def run_pipeline(
                     output_title=title,
                     output_mode=output_mode,
                     output_path=job.output_path or None,
-                    doc_id=job.doc_id or None,
-                    doc_url=job.doc_url or None,
                     language=job.language,
                 )
 
-                if config.output_mode == OutputMode.MARKDOWN:
-                    doc_store = DocumentStore(db=history)
-                    doc_store.ensure_registered(config.markdown_output_dir)
+                doc_store = DocumentStore(db=history)
+                doc_store.ensure_registered(config.markdown_output_dir)
+                if key_moments_dicts and highlights_slug and job.output_path:
+                    history.save_highlights(
+                        highlights_slug, job.output_path, key_moments_dicts
+                    )
+                    cb.on_log(
+                        f"  Saved {len(key_moments_dicts)} key moments.",
+                        level=LogLevel.DIM,
+                    )
 
                 if config.naming_mode == NamingMode.SEQUENTIAL:
                     next_seq += 1

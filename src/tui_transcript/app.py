@@ -12,7 +12,7 @@ LOG_FILE = "tui_transcript.log"
 
 
 class TranscriptApp(App):
-    """TUI Video-to-Docs: transcribe videos and export to Google Docs or Markdown."""
+    """TUI Video-to-Docs: transcribe videos and export to Markdown."""
 
     TITLE = "TUI Video-to-Docs"
     CSS_PATH = "styles.tcss"

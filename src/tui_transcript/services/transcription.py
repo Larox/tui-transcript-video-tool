@@ -9,6 +9,8 @@ from pathlib import Path
 
 from deepgram import AsyncDeepgramClient
 
+from tui_transcript.models import TranscriptParagraph, TranscriptResult
+
 logger = logging.getLogger(__name__)
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".opus", ".wma"}
@@ -45,7 +47,7 @@ async def transcribe(
     *,
     language: str = "es",
     on_status: callable | None = None,
-) -> str:
+) -> TranscriptResult:
     """Transcribe a local video/audio file via Deepgram.
 
     *language* is a BCP-47 code (e.g. ``"es"``, ``"en"``, ``"multi"``).
@@ -100,10 +102,22 @@ async def transcribe(
 
         alt = response.results.channels[0].alternatives[0]
 
-        if alt.paragraphs and alt.paragraphs.transcript:
-            return alt.paragraphs.transcript
+        paragraphs: list[TranscriptParagraph] = []
+        if alt.paragraphs and alt.paragraphs.paragraphs:
+            for para in alt.paragraphs.paragraphs:
+                sentence_texts = [s.text for s in (para.sentences or [])]
+                paragraphs.append(
+                    TranscriptParagraph(
+                        start=para.start,
+                        end=para.end,
+                        text=" ".join(sentence_texts),
+                    )
+                )
 
-        return alt.transcript or ""
+        if alt.paragraphs and alt.paragraphs.transcript:
+            return TranscriptResult(text=alt.paragraphs.transcript, paragraphs=paragraphs)
+
+        return TranscriptResult(text=alt.transcript or "", paragraphs=paragraphs)
 
     finally:
         if tmp_dir is not None:

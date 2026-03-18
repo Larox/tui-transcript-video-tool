@@ -2,23 +2,20 @@ const API_BASE = '/api';
 
 export interface Config {
   deepgram_api_key: string;
-  google_service_account_json: string;
-  drive_folder_id: string;
   naming_mode: string;
   prefix: string;
   course_name: string;
   markdown_output_dir: string;
-  output_mode: string;
+  anthropic_api_key: string;
 }
 
 export interface ConfigUpdate {
   deepgram_api_key?: string;
-  google_service_account_json?: string;
-  drive_folder_id?: string;
   naming_mode?: string;
   prefix?: string;
   course_name?: string;
   markdown_output_dir?: string;
+  anthropic_api_key?: string;
 }
 
 export interface UploadedFile {
@@ -32,16 +29,26 @@ export interface FileSpec {
   language: string;
 }
 
+export interface KeyMoment {
+  timestamp: string;
+  description: string;
+}
+
+export interface HighlightsResponse {
+  id: number;
+  slug: string;
+  moments: KeyMoment[];
+}
+
 export interface JobStatus {
   path: string;
   language: string;
   status: string;
   progress: number;
   transcript: string;
-  doc_id: string;
-  doc_url: string;
   output_path: string;
   error: string;
+  key_moments: KeyMoment[];
 }
 
 export async function getConfig(): Promise<Config> {
@@ -135,6 +142,8 @@ export interface DocumentFile {
   name: string;
   size_bytes: number;
   modified_at: string;
+  highlights_id?: number;
+  highlights_slug?: string;
 }
 
 export async function getDirectories(): Promise<DirectoryEntry[]> {
@@ -202,6 +211,15 @@ export async function openDirectory(id: number): Promise<void> {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || 'Failed to open directory');
   }
+}
+
+export async function getHighlights(slug: string): Promise<HighlightsResponse> {
+  const res = await fetch(`${API_BASE}/documents/highlights/${encodeURIComponent(slug)}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to fetch highlights');
+  }
+  return res.json();
 }
 
 // ------------------------------------------------------------------

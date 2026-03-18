@@ -1,17 +1,16 @@
 [project]
 name = "tui-transcript"
 version = "0.1.0"
-description = "TUI app to transcribe video files via Deepgram and export to Google Docs or Markdown"
+description = "TUI app to transcribe video files via Deepgram and export to Markdown"
 requires-python = ">=3.12"
 dependencies = [
     "textual",
     "deepgram-sdk",
-    "google-api-python-client",
-    "google-auth",
     "python-dotenv",
     "fastapi",
     "uvicorn[standard]",
     "python-multipart",
+    "anthropic>=0.25",
 ]
 
 [project.scripts]

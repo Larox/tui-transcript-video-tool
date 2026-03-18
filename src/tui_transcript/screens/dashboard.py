@@ -23,7 +23,6 @@ from tui_transcript.models import (
     JobStatus,
     LANGUAGES,
     NamingMode,
-    OutputMode,
     VideoJob,
 )
 from tui_transcript.screens.config import ConfigScreen
@@ -105,8 +104,7 @@ class DashboardScreen(Screen):
         yield Header(show_clock=True)
 
         with Vertical(id="dashboard"):
-            mode = "Google Docs" if self.app.config.output_mode == OutputMode.GOOGLE_DOCS else "Local Markdown"  # type: ignore[attr-defined]
-            yield Label(f"Output mode: {mode}", id="mode_banner")
+            yield Label("Output mode: Local Markdown", id="mode_banner")
 
             with Horizontal(id="file-input-row"):
                 yield Button("Browse", variant="primary", id="btn_browse")
@@ -152,8 +150,7 @@ class DashboardScreen(Screen):
         )
 
     def _on_settings_closed(self, _result: object = None) -> None:
-        mode = "Google Docs" if self.config.output_mode == OutputMode.GOOGLE_DOCS else "Local Markdown"
-        self.query_one("#mode_banner", Label).update(f"Output mode: {mode}")
+        pass
 
     def _on_files_picked(self, selections: list[tuple[Path, str]]) -> None:
         if not selections:

@@ -27,13 +27,11 @@ def get_config() -> ConfigResponse:
     config = EnvConfigStore().load()
     return ConfigResponse(
         deepgram_api_key=_mask_key(config.deepgram_api_key) if config.deepgram_api_key else "",
-        google_service_account_json=config.google_service_account_json,
-        drive_folder_id=config.drive_folder_id,
         naming_mode=config.naming_mode.value,
         prefix=config.prefix,
         course_name=config.course_name,
         markdown_output_dir=config.markdown_output_dir,
-        output_mode=config.output_mode.value,
+        anthropic_api_key=_mask_key(config.anthropic_api_key) if config.anthropic_api_key else "",
     )
 
 
@@ -45,10 +43,6 @@ def put_config(update: ConfigUpdate) -> dict:
 
     if update.deepgram_api_key is not None:
         config.deepgram_api_key = update.deepgram_api_key
-    if update.google_service_account_json is not None:
-        config.google_service_account_json = update.google_service_account_json
-    if update.drive_folder_id is not None:
-        config.drive_folder_id = update.drive_folder_id
     if update.naming_mode is not None:
         try:
             config.naming_mode = NamingMode(update.naming_mode)
@@ -60,13 +54,14 @@ def put_config(update: ConfigUpdate) -> dict:
         config.course_name = update.course_name
     if update.markdown_output_dir is not None:
         config.markdown_output_dir = update.markdown_output_dir
+    if update.anthropic_api_key is not None:
+        config.anthropic_api_key = update.anthropic_api_key
 
-    if not config.google_service_account_json or not config.drive_folder_id:
-        if not config.course_name.strip():
-            raise HTTPException(
-                400,
-                "Course name is required when using Markdown output",
-            )
+    if not config.course_name.strip():
+        raise HTTPException(
+            400,
+            "Course name is required",
+        )
 
     store.save(config)
     return {"ok": True}

@@ -8,6 +8,7 @@ def _build_front_matter(
     lecture_title: str,
     course_name: str,
     duration_minutes: int | None,
+    highlights_id: str | None = None,
 ) -> str:
     """Build YAML front matter block for LLM-ready markdown."""
     lines = [
@@ -18,6 +19,8 @@ def _build_front_matter(
     ]
     if duration_minutes is not None:
         lines.append(f"video_duration_minutes: {duration_minutes}")
+    if highlights_id is not None:
+        lines.append(f"highlights_id: {highlights_id}")
     lines.append("---")
     return "\n".join(lines) + "\n\n"
 
@@ -35,6 +38,8 @@ class MarkdownExporter:
         date: str,
         course_name: str,
         duration_minutes: int | None = None,
+        key_moments: list[dict] | None = None,
+        highlights_id: str | None = None,
     ) -> Path:
         """Write a Markdown file with YAML front matter and return its path."""
         safe_name = "".join(
@@ -46,7 +51,14 @@ class MarkdownExporter:
             lecture_title=title,
             course_name=course_name,
             duration_minutes=duration_minutes,
+            highlights_id=highlights_id,
         )
-        content = f"{front_matter}# {title}\n\n{transcript}\n"
+        moments_section = ""
+        if key_moments:
+            lines = ["## Key Moments", ""]
+            for m in key_moments:
+                lines.append(f"- **{m['timestamp']}** — {m['description']}")
+            moments_section = "\n".join(lines) + "\n\n"
+        content = f"{front_matter}# {title}\n\n{moments_section}{transcript}\n"
         file_path.write_text(content, encoding="utf-8")
         return file_path
