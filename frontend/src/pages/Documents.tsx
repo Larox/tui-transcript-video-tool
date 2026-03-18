@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   RefreshCw,
   X,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import {
   getDirectories,
@@ -21,13 +23,22 @@ import {
   openDirectory,
   openPath,
   pickDirectory,
+  getHighlights,
   type DirectoryEntry,
   type DocumentFile,
+  type KeyMoment,
 } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -45,11 +56,47 @@ function formatDate(iso: string) {
   });
 }
 
+function HighlightsPanel({ slug }: { slug: string }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['highlights', slug],
+    queryFn: () => getHighlights(slug),
+  });
+
+  if (isLoading)
+    return (
+      <div className="flex flex-1 items-center justify-center py-8">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  if (error)
+    return (
+      <p className="px-4 text-sm text-destructive">{(error as Error).message}</p>
+    );
+  if (!data?.moments.length)
+    return (
+      <p className="px-4 text-sm text-muted-foreground">No key moments found for this document.</p>
+    );
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 space-y-3">
+      {data.moments.map((m: KeyMoment, i: number) => (
+        <div key={i} className="flex gap-3">
+          <span className="font-mono text-sm text-muted-foreground shrink-0 pt-0.5">
+            {m.timestamp}
+          </span>
+          <p className="text-sm leading-relaxed">{m.description}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DirectoryFiles({ dirId, dirPath }: { dirId: number; dirPath: string }) {
   const { data: files, isLoading, error } = useQuery({
     queryKey: ['directory-files', dirId],
     queryFn: () => getDirectoryFiles(dirId),
   });
+  const [activeSlug, setActiveSlug] = useState<string | null>(null);
 
   if (isLoading) return <p className="text-sm text-muted-foreground px-3 py-2">Loading files...</p>;
   if (error)
@@ -62,39 +109,64 @@ function DirectoryFiles({ dirId, dirPath }: { dirId: number; dirPath: string }) 
     return <p className="text-sm text-muted-foreground px-3 py-2">No documents yet.</p>;
 
   return (
-    <div className="space-y-1 px-3 pb-3">
-      {files.map((f) => (
-        <div
-          key={f.name}
-          className="flex items-center gap-3 rounded-md border bg-background px-3 py-2 text-sm"
-        >
-          <FileText className="size-4 shrink-0 text-muted-foreground" />
-          <span className="flex-1 truncate font-medium">{f.name}</span>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {formatSize(f.size_bytes)}
-          </span>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {formatDate(f.modified_at)}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="shrink-0 size-7"
-            title="Open in file browser"
-            onClick={async () => {
-              try {
-                await openPath(`${dirPath}/${f.name}`);
-              } catch (e) {
-                alert((e as Error).message);
-              }
-            }}
+    <>
+      <div className="space-y-1 px-3 pb-3">
+        {files.map((f: DocumentFile) => (
+          <div
+            key={f.name}
+            className="flex items-center gap-3 rounded-md border bg-background px-3 py-2 text-sm"
           >
-            <FolderOpen className="size-3.5" />
-          </Button>
-        </div>
-      ))}
-    </div>
+            <FileText className="size-4 shrink-0 text-muted-foreground" />
+            <span className="flex-1 truncate font-medium">{f.name}</span>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {formatSize(f.size_bytes)}
+            </span>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {formatDate(f.modified_at)}
+            </span>
+            {f.highlights_slug && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 size-7"
+                title="View key moments"
+                onClick={() => setActiveSlug(f.highlights_slug!)}
+              >
+                <Sparkles className="size-3.5" />
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0 size-7"
+              title="Open in file browser"
+              onClick={async () => {
+                try {
+                  await openPath(`${dirPath}/${f.name}`);
+                } catch (e) {
+                  alert((e as Error).message);
+                }
+              }}
+            >
+              <FolderOpen className="size-3.5" />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <Sheet open={activeSlug !== null} onOpenChange={(open) => { if (!open) setActiveSlug(null); }}>
+        <SheetContent side="right" className="flex flex-col w-full sm:max-w-md gap-4">
+          <SheetHeader>
+            <SheetTitle>Key Moments</SheetTitle>
+            <SheetDescription className="truncate">
+              {files.find((f: DocumentFile) => f.highlights_slug === activeSlug)?.name ?? activeSlug}
+            </SheetDescription>
+          </SheetHeader>
+          {activeSlug && <HighlightsPanel slug={activeSlug} />}
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 

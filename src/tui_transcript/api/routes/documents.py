@@ -9,6 +9,8 @@ from tui_transcript.api.schemas import (
     DirectoryEntry,
     DirectoryUpdate,
     DocumentFile,
+    HighlightsResponse,
+    KeyMoment as KeyMomentSchema,
 )
 from tui_transcript.services.document_store import (
     DirectoryNotFoundError,
@@ -91,6 +93,25 @@ def list_files(dir_id: int) -> list[DocumentFile]:
         raise HTTPException(422, str(exc))
     finally:
         store.close()
+
+
+@router.get("/highlights/{slug}", response_model=HighlightsResponse)
+def get_highlights(slug: str) -> HighlightsResponse:
+    """Fetch key moments for a document by its UUID slug."""
+    from tui_transcript.services.history import HistoryDB
+
+    db = HistoryDB()
+    try:
+        data = db.get_highlights_by_slug(slug)
+        if data is None:
+            raise HTTPException(404, f"No highlights found for slug: {slug}")
+        return HighlightsResponse(
+            id=data["id"],
+            slug=data["slug"],
+            moments=[KeyMomentSchema(**m) for m in data["moments"]],
+        )
+    finally:
+        db.close()
 
 
 @router.post("/directories/{dir_id}/open")

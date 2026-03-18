@@ -11,7 +11,7 @@ from tui_transcript.api.routes import config, documents, files, paths, transcrip
 
 app = FastAPI(
     title="TUI Transcript API",
-    description="Transcribe video/audio via Deepgram, export to Google Docs or Markdown",
+    description="Transcribe video/audio via Deepgram, export to Markdown",
     version="0.1.0",
 )
 

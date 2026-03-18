@@ -29,6 +29,14 @@ CREATE TABLE IF NOT EXISTS output_directories (
     path       TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS document_highlights (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug        TEXT    NOT NULL UNIQUE,
+    output_path TEXT    NOT NULL UNIQUE,
+    moments     TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -191,6 +199,46 @@ class HistoryDB:
         if row is None:
             return None
         return {"id": row[0], "name": row[1], "path": row[2], "created_at": row[3]}
+
+    # ------------------------------------------------------------------
+    # Document highlights
+    # ------------------------------------------------------------------
+
+    def save_highlights(
+        self, slug: str, output_path: str, moments: list[dict]
+    ) -> None:
+        """Persist key moments for a document. Upserts on slug conflict."""
+        import json as _json
+
+        self._conn.execute(
+            "INSERT INTO document_highlights (slug, output_path, moments) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(slug) DO UPDATE SET moments = excluded.moments",
+            (slug, output_path, _json.dumps(moments, ensure_ascii=False)),
+        )
+        self._conn.commit()
+
+    def get_highlights_by_slug(self, slug: str) -> dict | None:
+        """Return {id, slug, moments} for *slug*, or None if not found."""
+        import json as _json
+
+        row = self._conn.execute(
+            "SELECT id, slug, moments FROM document_highlights WHERE slug = ?",
+            (slug,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"id": row[0], "slug": row[1], "moments": _json.loads(row[2])}
+
+    def get_highlights_ref_for_path(self, output_path: str) -> dict | None:
+        """Return {id, slug} for the given output_path, or None if not found."""
+        row = self._conn.execute(
+            "SELECT id, slug FROM document_highlights WHERE output_path = ?",
+            (output_path,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"id": row[0], "slug": row[1]}
 
     # ------------------------------------------------------------------
     # Lifecycle

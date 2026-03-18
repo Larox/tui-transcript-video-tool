@@ -9,25 +9,22 @@ class ConfigResponse(BaseModel):
     """Config for GET. API key is masked."""
 
     deepgram_api_key: str = ""  # Masked as "***" when set
-    google_service_account_json: str = ""
-    drive_folder_id: str = ""
     naming_mode: str = "sequential"
     prefix: str = "Transcripcion"
     course_name: str = ""
     markdown_output_dir: str = "./output"
-    output_mode: str = "markdown"
+    anthropic_api_key: str = ""  # Masked as "***" when set
 
 
 class ConfigUpdate(BaseModel):
     """Partial config update for PUT."""
 
     deepgram_api_key: str | None = None
-    google_service_account_json: str | None = None
-    drive_folder_id: str | None = None
     naming_mode: str | None = None
     prefix: str | None = None
     course_name: str | None = None
     markdown_output_dir: str | None = None
+    anthropic_api_key: str | None = None
 
 
 class UploadedFile(BaseModel):
@@ -67,7 +64,7 @@ class TranscriptionStatusResponse(BaseModel):
     """Response for GET /transcription/status/{session_id}."""
 
     status: str  # "running" | "done"
-    jobs: list[dict]  # Each job as dict (path, status, output_path, doc_url, etc.)
+    jobs: list[dict]  # Each job as dict (path, status, output_path, etc.)
 
 
 class JobStatusEvent(BaseModel):
@@ -134,12 +131,29 @@ class DirectoryUpdate(BaseModel):
     path: str = Field(..., min_length=1)
 
 
+class KeyMoment(BaseModel):
+    """A single key moment with timestamp and description."""
+
+    timestamp: str
+    description: str
+
+
+class HighlightsResponse(BaseModel):
+    """Response from GET /documents/highlights/{slug}."""
+
+    id: int
+    slug: str
+    moments: list[KeyMoment]
+
+
 class DocumentFile(BaseModel):
     """A single document file inside a registered directory."""
 
     name: str
     size_bytes: int
     modified_at: str
+    highlights_id: int | None = None
+    highlights_slug: str | None = None
 
 
 # ------------------------------------------------------------------

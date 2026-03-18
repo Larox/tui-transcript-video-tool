@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Center, Horizontal, Vertical, VerticalScroll
+from textual.containers import Center, Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import (
     Button,
@@ -46,26 +44,6 @@ class ConfigScreen(Screen):
 
             yield Static(" ")
             yield Label(
-                "Google Service Account JSON (optional)",
-                classes="field-label",
-            )
-            yield Input(
-                value=config.google_service_account_json,
-                placeholder="/path/to/service-account.json",
-                id="google_json",
-            )
-
-            yield Label(
-                "Google Drive Folder ID (optional)", classes="field-label"
-            )
-            yield Input(
-                value=config.drive_folder_id,
-                placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ",
-                id="drive_folder",
-            )
-
-            yield Static(" ")
-            yield Label(
                 "Markdown Output Directory", classes="field-label"
             )
             self._md_output_dir = config.markdown_output_dir
@@ -102,30 +80,10 @@ class ConfigScreen(Screen):
                 id="course_name",
             )
 
-            yield Static(" ")
-            yield Label("", id="output_mode_label")
-
             with Center():
                 yield Button("Continue", variant="primary", id="btn_continue")
 
         yield Footer()
-
-    def on_mount(self) -> None:
-        self._update_output_label()
-
-    @on(Input.Changed, "#google_json")
-    @on(Input.Changed, "#drive_folder")
-    def _google_fields_changed(self) -> None:
-        self._update_output_label()
-
-    def _update_output_label(self) -> None:
-        gj = self.query_one("#google_json", Input).value.strip()
-        df = self.query_one("#drive_folder", Input).value.strip()
-        label = self.query_one("#output_mode_label", Label)
-        if gj and df:
-            label.update("Output: Google Docs")
-        else:
-            label.update("Output: Local Markdown (.md)")
 
     @on(Button.Pressed, "#btn_md_browse")
     def _open_dir_picker(self) -> None:
@@ -146,21 +104,13 @@ class ConfigScreen(Screen):
             self.notify("Deepgram API Key is required", severity="error")
             return
 
-        gj = self.query_one("#google_json", Input).value.strip()
-        if gj and not Path(gj).is_file():
-            self.notify(
-                "Google JSON path does not exist", severity="error"
-            )
-            return
-
-        df = self.query_one("#drive_folder", Input).value.strip()
         md_dir = self._md_output_dir.strip() or "./output"
         prefix = self.query_one("#prefix", Input).value.strip() or "Transcripcion"
         course_name = self.query_one("#course_name", Input).value.strip()
 
-        if not gj and not df and not course_name:
+        if not course_name:
             self.notify(
-                "Course Name is required when using Markdown output",
+                "Course Name is required",
                 severity="error",
             )
             return
@@ -172,8 +122,6 @@ class ConfigScreen(Screen):
 
         config = AppConfig(
             deepgram_api_key=dg_key,
-            google_service_account_json=gj,
-            drive_folder_id=df,
             naming_mode=naming,
             prefix=prefix,
             markdown_output_dir=md_dir,

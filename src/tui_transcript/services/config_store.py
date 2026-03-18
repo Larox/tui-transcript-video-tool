@@ -46,19 +46,17 @@ class EnvConfigStore:
             naming = NamingMode.ORIGINAL
         return AppConfig(
             deepgram_api_key=env.get("DEEPGRAM_API_KEY", ""),
-            google_service_account_json=env.get("GOOGLE_SERVICE_ACCOUNT_JSON", ""),
-            drive_folder_id=env.get("DRIVE_FOLDER_ID", ""),
             naming_mode=naming,
             prefix=env.get("PREFIX", "Transcripcion"),
             markdown_output_dir=env.get("MARKDOWN_OUTPUT_DIR", "./output"),
             course_name=env.get("COURSE_NAME", ""),
+            anthropic_api_key=env.get("ANTHROPIC_API_KEY", ""),
         )
 
     def save(self, config: AppConfig) -> None:
         _save_env("DEEPGRAM_API_KEY", config.deepgram_api_key)
-        _save_env("GOOGLE_SERVICE_ACCOUNT_JSON", config.google_service_account_json)
-        _save_env("DRIVE_FOLDER_ID", config.drive_folder_id)
         _save_env("NAMING_MODE", config.naming_mode.value)
         _save_env("PREFIX", config.prefix)
         _save_env("MARKDOWN_OUTPUT_DIR", config.markdown_output_dir)
         _save_env("COURSE_NAME", config.course_name)
+        _save_env("ANTHROPIC_API_KEY", config.anthropic_api_key)

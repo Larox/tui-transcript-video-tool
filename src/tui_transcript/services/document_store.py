@@ -103,6 +103,7 @@ class DocumentStore:
             if f.suffix != ".md":
                 continue
             stat = f.stat()
+            ref = self._db.get_highlights_ref_for_path(str(f))
             files.append(
                 {
                     "name": f.name,
@@ -110,6 +111,8 @@ class DocumentStore:
                     "modified_at": datetime.fromtimestamp(
                         stat.st_mtime, tz=timezone.utc
                     ).isoformat(),
+                    "highlights_id": ref["id"] if ref else None,
+                    "highlights_slug": ref["slug"] if ref else None,
                 }
             )
         return files

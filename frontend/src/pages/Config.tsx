@@ -29,24 +29,21 @@ export function Config() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isMarkdownOutput && !(values.course_name ?? '').trim()) {
-      alert('Course Name is required when using Markdown output.');
+    if (!(values.course_name ?? '').trim()) {
+      alert('Course Name is required.');
       return;
     }
     const update: ConfigUpdate = {};
     if (form.deepgram_api_key !== undefined) update.deepgram_api_key = form.deepgram_api_key;
-    if (form.google_service_account_json !== undefined) update.google_service_account_json = form.google_service_account_json;
-    if (form.drive_folder_id !== undefined) update.drive_folder_id = form.drive_folder_id;
     if (form.naming_mode !== undefined) update.naming_mode = form.naming_mode;
     if (form.prefix !== undefined) update.prefix = form.prefix;
     if (form.course_name !== undefined) update.course_name = form.course_name;
     if (form.markdown_output_dir !== undefined) update.markdown_output_dir = form.markdown_output_dir;
+    if (form.anthropic_api_key !== undefined) update.anthropic_api_key = form.anthropic_api_key;
     mutation.mutate(update);
   };
 
   const values = { ...config, ...form };
-
-  const isMarkdownOutput = config?.output_mode === 'markdown';
 
   if (isLoading) return <div className="p-4">Loading...</div>;
   if (error) return <div className="p-4 text-destructive">Failed to load config: {(error as Error).message}</div>;
@@ -55,7 +52,7 @@ export function Config() {
     <Card>
       <CardHeader>
         <CardTitle>Settings</CardTitle>
-        <CardDescription>Configure your Deepgram API key and optional Google Docs export.</CardDescription>
+        <CardDescription>Configure API keys and output preferences.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -72,46 +69,17 @@ export function Config() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="google_json">Google Service Account JSON (optional)</Label>
-            <div className="flex gap-2">
-              <Input
-                id="google_json"
-                type="text"
-                placeholder="/path/to/service-account.json"
-                value={values.google_service_account_json ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, google_service_account_json: e.target.value }))}
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                title="Open in file browser"
-                disabled={!values.google_service_account_json?.trim()}
-                onClick={async () => {
-                  const path = values.google_service_account_json?.trim();
-                  if (!path) return;
-                  try {
-                    await openPath(path);
-                  } catch (e) {
-                    alert((e as Error).message);
-                  }
-                }}
-              >
-                <FolderOpen className="size-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="drive_folder">Google Drive Folder ID (optional)</Label>
+            <Label htmlFor="anthropic-key">Anthropic API Key (optional)</Label>
             <Input
-              id="drive_folder"
-              type="text"
-              placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
-              value={values.drive_folder_id ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, drive_folder_id: e.target.value }))}
+              id="anthropic-key"
+              type="password"
+              placeholder={config?.anthropic_api_key ? '(set — enter to change)' : 'sk-ant-...'}
+              value={values.anthropic_api_key ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, anthropic_api_key: e.target.value }))}
             />
+            <p className="text-xs text-muted-foreground">
+              Used to extract Key Moments from transcripts via Claude. Leave blank to skip.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -195,22 +163,16 @@ export function Config() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="course_name">Course Name {isMarkdownOutput && '*'}</Label>
+            <Label htmlFor="course_name">Course Name *</Label>
             <Input
               id="course_name"
               type="text"
               placeholder="Introduction to Python"
               value={values.course_name ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, course_name: e.target.value }))}
-              required={isMarkdownOutput}
+              required
             />
           </div>
-
-          {config?.output_mode && (
-            <p className="text-sm text-muted-foreground">
-              Output: {config.output_mode === 'google_docs' ? 'Google Docs' : 'Local Markdown (.md)'}
-            </p>
-          )}
 
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save'}
