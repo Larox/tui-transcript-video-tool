@@ -96,12 +96,20 @@ async def run_pipeline(
             source_path = str(job.path)
 
             if history.is_already_processed(source_path, config.prefix, output_mode):
+                record = history.get_processed_record(
+                    source_path, config.prefix, output_mode
+                )
+                if record:
+                    job.output_path = record.get("output_path", "") or ""
+                    job.doc_id = record.get("doc_id", "") or ""
+                    job.doc_url = record.get("doc_url", "") or ""
                 cb.on_log(
                     f"Skipped: {job.path.name} "
                     f"(already processed with prefix '{config.prefix}')",
                     level=LogLevel.HIGHLIGHT,
                 )
                 job.status = JobStatus.DONE
+                job.progress = 1.0
                 cb.on_job_status_changed(job)
                 cb.on_progress_advance(2)
                 continue
@@ -110,6 +118,7 @@ async def run_pipeline(
             try:
                 # --- Transcribe ---
                 job.status = JobStatus.TRANSCRIBING
+                job.progress = 0.3
                 cb.on_job_status_changed(job)
 
                 file_mb = job.path.stat().st_size / 1_048_576
@@ -151,6 +160,7 @@ async def run_pipeline(
 
                 # --- Export ---
                 job.status = JobStatus.UPLOADING
+                job.progress = 0.8
                 cb.on_job_status_changed(job)
 
                 if config.output_mode == OutputMode.GOOGLE_DOCS:
@@ -193,6 +203,7 @@ async def run_pipeline(
                 cb.on_progress_advance(1)
                 step_done = 2
                 job.status = JobStatus.DONE
+                job.progress = 1.0
                 cb.on_job_status_changed(job)
 
                 history.record(
@@ -218,6 +229,7 @@ async def run_pipeline(
             except Exception as exc:
                 job.status = JobStatus.ERROR
                 job.error = str(exc)
+                # Keep progress at last value (0.3 or 0.8) to show where it failed
                 cb.on_job_status_changed(job)
                 cb.on_progress_advance(2 - step_done)
 

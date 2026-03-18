@@ -69,18 +69,19 @@ function AppSidebar() {
   );
 }
 
-function App() {
+function AppContent() {
+  const location = useLocation();
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <SidebarProvider>
-          <AppSidebar />
-          <SidebarInset>
-            <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-              <SidebarTrigger />
-              <div className="flex-1" />
-            </header>
-            <main className="flex-1 p-6 max-w-3xl">
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger />
+          <div className="flex-1" />
+        </header>
+        <main
+          className={`flex-1 p-6 ${location.pathname === '/' ? 'max-w-7xl' : 'max-w-3xl'}`}
+        >
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/documents" element={<Documents />} />
@@ -89,6 +90,14 @@ function App() {
             </main>
           </SidebarInset>
         </SidebarProvider>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AppContent />
       </BrowserRouter>
     </QueryClientProvider>
   );

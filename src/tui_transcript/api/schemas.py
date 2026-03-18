@@ -63,6 +63,13 @@ class TranscriptionStartResponse(BaseModel):
     session_id: str
 
 
+class TranscriptionStatusResponse(BaseModel):
+    """Response for GET /transcription/status/{session_id}."""
+
+    status: str  # "running" | "done"
+    jobs: list[dict]  # Each job as dict (path, status, output_path, doc_url, etc.)
+
+
 class JobStatusEvent(BaseModel):
     """SSE event: job status changed."""
 

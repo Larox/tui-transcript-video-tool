@@ -66,6 +66,23 @@ class HistoryDB:
         ).fetchone()
         return row is not None
 
+    def get_processed_record(
+        self, source_path: str, prefix: str, output_mode: str
+    ) -> dict | None:
+        """Return output_path, doc_id, doc_url for an already-processed file, or None."""
+        row = self._conn.execute(
+            "SELECT output_path, doc_id, doc_url FROM processed_videos "
+            "WHERE source_path = ? AND prefix = ? AND output_mode = ?",
+            (source_path, prefix, output_mode),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "output_path": row[0] or "",
+            "doc_id": row[1] or "",
+            "doc_url": row[2] or "",
+        }
+
     def get_output_title_exists(
         self, output_title: str, output_mode: str
     ) -> bool:

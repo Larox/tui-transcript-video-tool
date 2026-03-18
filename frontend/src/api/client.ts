@@ -90,6 +90,22 @@ export async function startTranscription(
   return res.json();
 }
 
+export interface TranscriptionStatus {
+  status: 'running' | 'done';
+  jobs: JobStatus[];
+}
+
+export async function getTranscriptionStatus(
+  sessionId: string
+): Promise<TranscriptionStatus> {
+  const res = await fetch(`${API_BASE}/transcription/status/${sessionId}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to fetch status');
+  }
+  return res.json();
+}
+
 export async function openPath(path: string): Promise<void> {
   const res = await fetch(`${API_BASE}/paths/open`, {
     method: 'POST',

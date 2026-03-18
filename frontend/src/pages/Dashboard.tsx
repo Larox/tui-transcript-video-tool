@@ -5,13 +5,14 @@ import {
   uploadFiles,
   startTranscription,
   subscribeToProgress,
+  getTranscriptionStatus,
   openPath,
   type UploadedFile,
   type FileSpec,
   type SSEEvent,
   type JobStatus,
 } from '@/api/client';
-import { FolderOpen, ExternalLink } from 'lucide-react';
+import { FolderOpen, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -121,7 +122,26 @@ export function Dashboard() {
             setStatusLabel('Done!');
           }
         },
-        () => setProcessing(false)
+        async () => {
+          // On SSE connection loss, poll status to recover state
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await new Promise((r) => setTimeout(r, 1000));
+            try {
+              const status = await getTranscriptionStatus(session_id);
+              status.jobs.forEach((job) =>
+                setJobs((j) => ({ ...j, [job.path]: job }))
+              );
+              if (status.status === 'done') {
+                setStatusLabel('Done!');
+                setProcessing(false);
+                return;
+              }
+            } catch {
+              // Ignore fetch errors, keep trying
+            }
+          }
+          setProcessing(false);
+        }
       );
     } catch (e) {
       alert((e as Error).message);
@@ -141,6 +161,8 @@ export function Dashboard() {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const showTwoColumn = files.length > 0 || logs.length > 0;
 
   return (
     <div className="space-y-6">
@@ -173,132 +195,177 @@ export function Dashboard() {
         </p>
       </div>
 
-      {files.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Files ({files.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {files.map((f) => (
-              <div
-                key={f.id}
-                className="flex items-center gap-4 rounded-md border bg-card p-3 text-sm"
-              >
-                <span className="flex-1 truncate font-medium">{f.name}</span>
-                <span className="text-muted-foreground shrink-0">{formatSize(f.size_bytes)}</span>
-                <Select
-                  value={f.language}
-                  onValueChange={(v) => setFileLanguage(f.id, v)}
-                  disabled={processing}
-                >
-                  <SelectTrigger className="w-[140px] h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LANGUAGES.map((l) => (
-                      <SelectItem key={l.code} value={l.code}>
-                        {l.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-muted-foreground capitalize shrink-0 w-24">
-                  {Object.values(jobs).find((j) => j.path.endsWith(f.name))?.status ?? 'pending'}
-                </span>
-                {(() => {
-                  const job = Object.values(jobs).find((j) => j.path.endsWith(f.name));
-                  if (job?.status === 'done' && (job.output_path || job.doc_url)) {
-                    if (job.doc_url) {
-                      return (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="shrink-0"
-                          title="Open in Google Docs"
-                          onClick={() => window.open(job.doc_url, '_blank')}
-                        >
-                          <ExternalLink className="size-4" />
-                        </Button>
-                      );
-                    }
-                    if (job.output_path) {
-                      return (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="shrink-0"
-                          title="Open in file browser"
-                          onClick={async () => {
-                            try {
-                              await openPath(job.output_path);
-                            } catch (e) {
-                              alert((e as Error).message);
-                            }
-                          }}
-                        >
-                          <FolderOpen className="size-4" />
-                        </Button>
-                      );
-                    }
-                  }
-                  if (!processing) {
-                    return (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive shrink-0"
-                        onClick={() => removeFile(f.id)}
+      {showTwoColumn ? (
+        <div className="flex flex-col lg:flex-row gap-6 items-stretch lg:items-start">
+          <div className="flex-1 min-w-0 space-y-6">
+            {files.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Files ({files.length})</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {files.map((f) => (
+                    <div
+                      key={f.id}
+                      className="flex items-center gap-4 rounded-md border bg-card p-3 text-sm"
+                    >
+                      <span className="flex-1 truncate font-medium">{f.name}</span>
+                      <span className="text-muted-foreground shrink-0">{formatSize(f.size_bytes)}</span>
+                      <Select
+                        value={f.language}
+                        onValueChange={(v) => setFileLanguage(f.id, v)}
+                        disabled={processing}
                       >
-                        Remove
-                      </Button>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+                        <SelectTrigger className="w-[140px] h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LANGUAGES.map((l) => (
+                            <SelectItem key={l.code} value={l.code}>
+                              {l.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {(() => {
+                        const job = Object.values(jobs).find((j) => j.path.endsWith(f.name));
+                        const status = job?.status ?? 'pending';
+                        const progress = job?.progress ?? 0;
+                        const isInProgress = status === 'transcribing' || status === 'uploading';
+                        const statusColor = {
+                          pending: 'text-yellow-500',
+                          transcribing: 'text-yellow-500',
+                          uploading: 'text-yellow-500',
+                          done: 'text-green-500',
+                          error: 'text-red-500',
+                        }[status] ?? 'text-muted-foreground';
+                        return (
+                          <span
+                            className={`text-xs capitalize shrink-0 flex items-center gap-2 min-w-32 ${statusColor}`}
+                          >
+                            {isInProgress && (
+                              <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                            )}
+                            <span>{Math.round(progress * 100)}%</span>
+                            <span className="capitalize">{status}</span>
+                          </span>
+                        );
+                      })()}
+                      {(() => {
+                        const job = Object.values(jobs).find((j) => j.path.endsWith(f.name));
+                        if (job?.status === 'done' && (job.output_path || job.doc_url)) {
+                          if (job.doc_url) {
+                            return (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="shrink-0"
+                                title="Open in Google Docs"
+                                onClick={() => window.open(job.doc_url, '_blank')}
+                              >
+                                <ExternalLink className="size-4" />
+                              </Button>
+                            );
+                          }
+                          if (job.output_path) {
+                            return (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="shrink-0"
+                                title="Open in file browser"
+                                onClick={async () => {
+                                  try {
+                                    await openPath(job.output_path);
+                                  } catch (e) {
+                                    alert((e as Error).message);
+                                  }
+                                }}
+                              >
+                                <FolderOpen className="size-4" />
+                              </Button>
+                            );
+                          }
+                        }
+                        if (!processing) {
+                          return (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-muted-foreground hover:text-destructive shrink-0"
+                              onClick={() => removeFile(f.id)}
+                            >
+                              Remove
+                            </Button>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
-      <div className="flex gap-3">
-        <Button
-          onClick={start}
-          disabled={!files.length || processing}
-        >
-          {processing ? 'Processing...' : 'Start'}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={clear}
-          disabled={processing}
-        >
-          Clear
-        </Button>
-      </div>
-
-      {statusLabel && (
-        <p className="text-sm text-muted-foreground">{statusLabel}</p>
-      )}
-
-      {logs.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Logs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-[200px] overflow-y-auto rounded-md border bg-muted/30 p-3 font-mono text-xs text-muted-foreground space-y-1">
-              {logs.map((msg, i) => (
-                <div key={i} className="break-all">
-                  {msg}
-                </div>
-              ))}
+            <div className="flex gap-3">
+              <Button
+                onClick={start}
+                disabled={!files.length || processing}
+              >
+                {processing ? 'Processing...' : 'Start'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={clear}
+                disabled={processing}
+              >
+                Clear
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+
+            {statusLabel && (
+              <p className="text-sm text-muted-foreground">{statusLabel}</p>
+            )}
+          </div>
+
+          <aside className="w-full lg:w-[28rem] lg:min-w-96 shrink-0 lg:sticky lg:top-6 flex flex-col">
+            <Card className="flex-1 min-h-0 flex flex-col">
+              <CardHeader>
+                <CardTitle className="text-base">Logs</CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 min-h-0">
+                <div className="max-h-[min(70vh,560px)] overflow-y-auto rounded-md border bg-muted/30 p-4 font-mono text-sm text-muted-foreground space-y-1.5">
+                  {logs.length > 0 ? (
+                    logs.map((msg, i) => (
+                      <div key={i} className="break-all">
+                        {msg}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground text-sm">Logs will appear here when processing.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </aside>
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-3">
+            <Button onClick={start} disabled={!files.length || processing}>
+              {processing ? 'Processing...' : 'Start'}
+            </Button>
+            <Button variant="outline" onClick={clear} disabled={processing}>
+              Clear
+            </Button>
+          </div>
+          {statusLabel && (
+            <p className="text-sm text-muted-foreground">{statusLabel}</p>
+          )}
+        </>
       )}
     </div>
   );
