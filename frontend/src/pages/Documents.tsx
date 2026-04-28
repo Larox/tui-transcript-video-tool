@@ -17,7 +17,6 @@ import {
 import {
   getDirectories,
   getDirectoryFiles,
-  createDirectory,
   updateDirectory,
   deleteDirectory,
   openDirectory,
@@ -30,8 +29,8 @@ import {
 } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DirectoryForm } from '@/components/DirectoryForm';
 import {
   Sheet,
   SheetContent,
@@ -354,24 +353,6 @@ export function Documents() {
   });
 
   const [showAdd, setShowAdd] = useState(false);
-  const [addName, setAddName] = useState('');
-  const [addPath, setAddPath] = useState('');
-
-  const addMutation = useMutation({
-    mutationFn: () => createDirectory(addName.trim(), addPath.trim()),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['directories'] });
-      setShowAdd(false);
-      setAddName('');
-      setAddPath('');
-    },
-  });
-
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addName.trim() || !addPath.trim()) return;
-    addMutation.mutate();
-  };
 
   return (
     <div className="space-y-6">
@@ -398,80 +379,14 @@ export function Documents() {
             <CardTitle className="text-sm">Register Output Directory</CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <form onSubmit={handleAdd} className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="add-name" className="text-xs">
-                  Name
-                </Label>
-                <Input
-                  id="add-name"
-                  type="text"
-                  placeholder="e.g. Lecture Notes"
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  className="h-8 text-sm"
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="add-path" className="text-xs">
-                  Directory Path
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="add-path"
-                    type="text"
-                    placeholder="/Users/you/Documents/transcripts"
-                    value={addPath}
-                    onChange={(e) => setAddPath(e.target.value)}
-                    className="h-8 text-sm flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 shrink-0"
-                    onClick={async () => {
-                      try {
-                        const picked = await pickDirectory();
-                        if (picked) setAddPath(picked);
-                      } catch (e) {
-                        alert((e as Error).message);
-                      }
-                    }}
-                  >
-                    <FolderSearch className="size-3.5 mr-1.5" />
-                    Browse
-                  </Button>
-                </div>
-              </div>
-              <div className="flex gap-2 items-center">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={addMutation.isPending || !addName.trim() || !addPath.trim()}
-                >
-                  {addMutation.isPending ? 'Adding...' : 'Add'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowAdd(false);
-                    setAddName('');
-                    setAddPath('');
-                  }}
-                >
-                  Cancel
-                </Button>
-                {addMutation.isError && (
-                  <span className="text-xs text-destructive">
-                    {(addMutation.error as Error).message}
-                  </span>
-                )}
-              </div>
-            </form>
+            <DirectoryForm
+              idPrefix="docs-add"
+              onSubmit={() => {
+                queryClient.invalidateQueries({ queryKey: ['directories'] });
+                setShowAdd(false);
+              }}
+              onCancel={() => setShowAdd(false)}
+            />
           </CardContent>
         </Card>
       )}
