@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -20,6 +19,11 @@ def client(tmp_path, monkeypatch):
     def patched(self, p=db_path):
         orig_init(self, p)
 
+    # Redirect EnvConfigStore writes to a temp .env so we don't mutate the dev's real one
+    monkeypatch.setattr(
+        "tui_transcript.services.config_store.ENV_PATH",
+        tmp_path / ".env",
+    )
     monkeypatch.setenv("DEEPGRAM_API_KEY", "dg-x")
     with patch.object(HistoryDB, "__init__", patched):
         yield TestClient(app)

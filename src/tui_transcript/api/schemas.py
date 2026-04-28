@@ -12,8 +12,6 @@ class ConfigResponse(BaseModel):
     output destination is chosen per-batch via the directories registry.
     """
 
-    model_config = {"extra": "forbid"}
-
     deepgram_api_key: str = ""  # Masked as "***" when set
     naming_mode: str = "sequential"
     prefix: str = "Transcripcion"
