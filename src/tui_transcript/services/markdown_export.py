@@ -27,7 +27,7 @@ def _build_front_matter(
 
 class MarkdownExporter:
     def __init__(self, output_dir: str) -> None:
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir).expanduser().resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def export(

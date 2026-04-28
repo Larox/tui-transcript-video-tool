@@ -7,7 +7,16 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from tui_transcript.api.routes import config, documents, files, paths, transcription
+from tui_transcript.api.routes import (
+    collections,
+    config,
+    documents,
+    files,
+    paths,
+    search,
+    tags,
+    transcription,
+)
 
 app = FastAPI(
     title="TUI Transcript API",
@@ -23,9 +32,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(collections.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
+app.include_router(search.router, prefix="/api")
+app.include_router(tags.router, prefix="/api")
 app.include_router(transcription.router, prefix="/api")
 app.include_router(paths.router, prefix="/api")
 

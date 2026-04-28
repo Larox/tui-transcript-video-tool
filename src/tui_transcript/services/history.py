@@ -37,6 +37,41 @@ CREATE TABLE IF NOT EXISTS document_highlights (
     moments     TEXT    NOT NULL,
     created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS collections (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    collection_type TEXT NOT NULL DEFAULT 'other',
+    description     TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS collection_items (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    video_id      INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    position      INTEGER NOT NULL DEFAULT 0,
+    added_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(collection_id, video_id)
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+    id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    name  TEXT NOT NULL UNIQUE,
+    color TEXT NOT NULL DEFAULT '#6b7280'
+);
+
+CREATE TABLE IF NOT EXISTS video_tags (
+    video_id INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    tag_id   INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (video_id, tag_id)
+);
+"""
+
+_FTS_SCHEMA = """\
+CREATE VIRTUAL TABLE IF NOT EXISTS transcript_search
+USING fts5(video_id UNINDEXED, output_title, source_path, content);
 """
 
 
@@ -47,7 +82,9 @@ class HistoryDB:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(db_path))
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
+        self._conn.executescript(_FTS_SCHEMA)
 
     # ------------------------------------------------------------------
     # Queries
@@ -239,6 +276,307 @@ class HistoryDB:
         if row is None:
             return None
         return {"id": row[0], "slug": row[1]}
+
+    # ------------------------------------------------------------------
+    # Collections
+    # ------------------------------------------------------------------
+
+    def create_collection(
+        self, name: str, collection_type: str = "other", description: str = ""
+    ) -> dict:
+        cur = self._conn.execute(
+            "INSERT INTO collections (name, collection_type, description) "
+            "VALUES (?, ?, ?)",
+            (name, collection_type, description),
+        )
+        self._conn.commit()
+        return self.get_collection(cur.lastrowid)  # type: ignore[arg-type]
+
+    def get_collection(self, collection_id: int) -> dict | None:
+        row = self._conn.execute(
+            "SELECT id, name, collection_type, description, created_at, updated_at "
+            "FROM collections WHERE id = ?",
+            (collection_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0],
+            "name": row[1],
+            "collection_type": row[2],
+            "description": row[3],
+            "created_at": row[4],
+            "updated_at": row[5],
+        }
+
+    def list_collections(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT c.id, c.name, c.collection_type, c.description, "
+            "c.created_at, c.updated_at, "
+            "COUNT(ci.id) AS item_count "
+            "FROM collections c "
+            "LEFT JOIN collection_items ci ON ci.collection_id = c.id "
+            "GROUP BY c.id ORDER BY c.updated_at DESC"
+        ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "name": r[1],
+                "collection_type": r[2],
+                "description": r[3],
+                "created_at": r[4],
+                "updated_at": r[5],
+                "item_count": r[6],
+            }
+            for r in rows
+        ]
+
+    def update_collection(
+        self,
+        collection_id: int,
+        *,
+        name: str | None = None,
+        collection_type: str | None = None,
+        description: str | None = None,
+    ) -> dict | None:
+        updates: list[str] = []
+        params: list = []
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+        if collection_type is not None:
+            updates.append("collection_type = ?")
+            params.append(collection_type)
+        if description is not None:
+            updates.append("description = ?")
+            params.append(description)
+        if not updates:
+            return self.get_collection(collection_id)
+        updates.append("updated_at = datetime('now')")
+        params.append(collection_id)
+        self._conn.execute(
+            f"UPDATE collections SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        self._conn.commit()
+        return self.get_collection(collection_id)
+
+    def delete_collection(self, collection_id: int) -> bool:
+        cur = self._conn.execute(
+            "DELETE FROM collections WHERE id = ?", (collection_id,)
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def add_collection_item(self, collection_id: int, video_id: int) -> None:
+        max_pos = self._conn.execute(
+            "SELECT COALESCE(MAX(position), -1) FROM collection_items "
+            "WHERE collection_id = ?",
+            (collection_id,),
+        ).fetchone()[0]
+        self._conn.execute(
+            "INSERT OR IGNORE INTO collection_items (collection_id, video_id, position) "
+            "VALUES (?, ?, ?)",
+            (collection_id, video_id, max_pos + 1),
+        )
+        self._conn.commit()
+
+    def remove_collection_item(self, collection_id: int, video_id: int) -> bool:
+        cur = self._conn.execute(
+            "DELETE FROM collection_items WHERE collection_id = ? AND video_id = ?",
+            (collection_id, video_id),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def reorder_collection_items(
+        self, collection_id: int, video_ids: list[int]
+    ) -> None:
+        for pos, vid in enumerate(video_ids):
+            self._conn.execute(
+                "UPDATE collection_items SET position = ? "
+                "WHERE collection_id = ? AND video_id = ?",
+                (pos, collection_id, vid),
+            )
+        self._conn.commit()
+
+    def list_collection_items(self, collection_id: int) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT pv.id, pv.source_path, pv.output_title, pv.output_path, "
+            "pv.language, pv.processed_at, ci.position "
+            "FROM collection_items ci "
+            "JOIN processed_videos pv ON pv.id = ci.video_id "
+            "WHERE ci.collection_id = ? "
+            "ORDER BY ci.position",
+            (collection_id,),
+        ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "source_path": r[1],
+                "output_title": r[2],
+                "output_path": r[3],
+                "language": r[4],
+                "processed_at": r[5],
+                "position": r[6],
+            }
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
+    # Tags
+    # ------------------------------------------------------------------
+
+    def create_tag(self, name: str, color: str = "#6b7280") -> dict:
+        cur = self._conn.execute(
+            "INSERT INTO tags (name, color) VALUES (?, ?)", (name, color)
+        )
+        self._conn.commit()
+        return {"id": cur.lastrowid, "name": name, "color": color}
+
+    def list_tags(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT id, name, color FROM tags ORDER BY name"
+        ).fetchall()
+        return [{"id": r[0], "name": r[1], "color": r[2]} for r in rows]
+
+    def delete_tag(self, tag_id: int) -> bool:
+        cur = self._conn.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def add_video_tag(self, video_id: int, tag_id: int) -> None:
+        self._conn.execute(
+            "INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)",
+            (video_id, tag_id),
+        )
+        self._conn.commit()
+
+    def remove_video_tag(self, video_id: int, tag_id: int) -> bool:
+        cur = self._conn.execute(
+            "DELETE FROM video_tags WHERE video_id = ? AND tag_id = ?",
+            (video_id, tag_id),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def get_video_tags(self, video_id: int) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT t.id, t.name, t.color FROM tags t "
+            "JOIN video_tags vt ON vt.tag_id = t.id "
+            "WHERE vt.video_id = ? ORDER BY t.name",
+            (video_id,),
+        ).fetchall()
+        return [{"id": r[0], "name": r[1], "color": r[2]} for r in rows]
+
+    # ------------------------------------------------------------------
+    # Full-text search
+    # ------------------------------------------------------------------
+
+    def index_transcript(
+        self, video_id: int, output_title: str, source_path: str, content: str
+    ) -> None:
+        """Add or replace a transcript in the FTS index."""
+        self._conn.execute(
+            "DELETE FROM transcript_search WHERE video_id = ?", (video_id,)
+        )
+        self._conn.execute(
+            "INSERT INTO transcript_search (video_id, output_title, source_path, content) "
+            "VALUES (?, ?, ?, ?)",
+            (video_id, output_title, source_path, content),
+        )
+        self._conn.commit()
+
+    def search_transcripts(
+        self,
+        query: str,
+        *,
+        collection_id: int | None = None,
+        tag_name: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Full-text search across transcripts with optional filters."""
+        if not query.strip():
+            return []
+
+        sql = (
+            "SELECT ts.video_id, ts.output_title, ts.source_path, "
+            "snippet(transcript_search, 3, '<mark>', '</mark>', '...', 40) AS excerpt, "
+            "rank "
+            "FROM transcript_search ts "
+            "JOIN processed_videos pv ON pv.id = ts.video_id "
+        )
+        joins: list[str] = []
+        conditions = ["transcript_search MATCH ?"]
+        params: list = [query]
+
+        if collection_id is not None:
+            joins.append(
+                "JOIN collection_items ci ON ci.video_id = ts.video_id"
+            )
+            conditions.append("ci.collection_id = ?")
+            params.append(collection_id)
+
+        if tag_name is not None:
+            joins.append("JOIN video_tags vt ON vt.video_id = ts.video_id")
+            joins.append("JOIN tags t ON t.id = vt.tag_id")
+            conditions.append("t.name = ?")
+            params.append(tag_name)
+
+        sql += " ".join(joins) + " WHERE " + " AND ".join(conditions)
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(limit)
+
+        rows = self._conn.execute(sql, params).fetchall()
+        return [
+            {
+                "video_id": r[0],
+                "output_title": r[1],
+                "source_path": r[2],
+                "excerpt": r[3],
+                "rank": r[4],
+            }
+            for r in rows
+        ]
+
+    def get_video_by_source_and_prefix(
+        self, source_path: str, prefix: str, output_mode: str
+    ) -> dict | None:
+        """Return the full processed_videos row for source+prefix+mode."""
+        row = self._conn.execute(
+            "SELECT id, source_path, output_title, output_path, language, processed_at "
+            "FROM processed_videos "
+            "WHERE source_path = ? AND prefix = ? AND output_mode = ?",
+            (source_path, prefix, output_mode),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0],
+            "source_path": row[1],
+            "output_title": row[2],
+            "output_path": row[3],
+            "language": row[4],
+            "processed_at": row[5],
+        }
+
+    def list_videos(self) -> list[dict]:
+        """Return all processed videos for selection UIs."""
+        rows = self._conn.execute(
+            "SELECT id, source_path, output_title, output_path, language, processed_at "
+            "FROM processed_videos ORDER BY processed_at DESC"
+        ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "source_path": r[1],
+                "output_title": r[2],
+                "output_path": r[3],
+                "language": r[4],
+                "processed_at": r[5],
+            }
+            for r in rows
+        ]
 
     # ------------------------------------------------------------------
     # Lifecycle

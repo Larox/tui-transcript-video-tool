@@ -263,6 +263,219 @@ export async function browseDirectory(path?: string): Promise<BrowseResponse> {
 }
 
 // ------------------------------------------------------------------
+// Collections
+// ------------------------------------------------------------------
+
+export interface CollectionEntry {
+  id: number;
+  name: string;
+  collection_type: string;
+  description: string;
+  item_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionItemEntry {
+  id: number;
+  source_path: string;
+  output_title: string;
+  output_path: string | null;
+  language: string | null;
+  processed_at: string;
+  position: number;
+  tags: TagEntry[];
+}
+
+export interface CollectionDetail extends Omit<CollectionEntry, 'item_count'> {
+  items: CollectionItemEntry[];
+}
+
+export async function getCollections(): Promise<CollectionEntry[]> {
+  const res = await fetch(`${API_BASE}/collections`);
+  if (!res.ok) throw new Error('Failed to fetch collections');
+  return res.json();
+}
+
+export async function getCollection(id: number): Promise<CollectionDetail> {
+  const res = await fetch(`${API_BASE}/collections/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch collection');
+  return res.json();
+}
+
+export async function createCollection(data: {
+  name: string;
+  collection_type: string;
+  description?: string;
+}): Promise<CollectionEntry> {
+  const res = await fetch(`${API_BASE}/collections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to create collection');
+  }
+  return res.json();
+}
+
+export async function updateCollection(
+  id: number,
+  data: { name?: string; collection_type?: string; description?: string }
+): Promise<CollectionEntry> {
+  const res = await fetch(`${API_BASE}/collections/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to update collection');
+  }
+  return res.json();
+}
+
+export async function deleteCollection(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/collections/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to delete collection');
+  }
+}
+
+export async function addCollectionItems(
+  collectionId: number,
+  videoIds: number[]
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/collections/${collectionId}/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ video_ids: videoIds }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to add items');
+  }
+}
+
+export async function removeCollectionItem(
+  collectionId: number,
+  videoId: number
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/collections/${collectionId}/items/${videoId}`,
+    { method: 'DELETE' }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to remove item');
+  }
+}
+
+// ------------------------------------------------------------------
+// Tags
+// ------------------------------------------------------------------
+
+export interface TagEntry {
+  id: number;
+  name: string;
+  color: string;
+}
+
+export async function getTags(): Promise<TagEntry[]> {
+  const res = await fetch(`${API_BASE}/tags`);
+  if (!res.ok) throw new Error('Failed to fetch tags');
+  return res.json();
+}
+
+export async function createTag(
+  name: string,
+  color: string = '#6b7280'
+): Promise<TagEntry> {
+  const res = await fetch(`${API_BASE}/tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, color }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to create tag');
+  }
+  return res.json();
+}
+
+export async function deleteTag(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/tags/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to delete tag');
+  }
+}
+
+export async function addVideoTag(videoId: number, tagId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/videos/${videoId}/tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag_id: tagId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to add tag');
+  }
+}
+
+export async function removeVideoTag(videoId: number, tagId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/videos/${videoId}/tags/${tagId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to remove tag');
+  }
+}
+
+// ------------------------------------------------------------------
+// Search & Videos
+// ------------------------------------------------------------------
+
+export interface SearchResultEntry {
+  video_id: number;
+  output_title: string;
+  source_path: string;
+  excerpt: string;
+  rank: number;
+}
+
+export interface VideoEntry {
+  id: number;
+  source_path: string;
+  output_title: string;
+  output_path: string | null;
+  language: string | null;
+  processed_at: string;
+}
+
+export async function searchTranscripts(
+  q: string,
+  opts?: { collection_id?: number; tag?: string; limit?: number }
+): Promise<SearchResultEntry[]> {
+  const params = new URLSearchParams({ q });
+  if (opts?.collection_id != null) params.set('collection_id', String(opts.collection_id));
+  if (opts?.tag) params.set('tag', opts.tag);
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  const res = await fetch(`${API_BASE}/search?${params}`);
+  if (!res.ok) throw new Error('Search failed');
+  return res.json();
+}
+
+export async function getVideos(): Promise<VideoEntry[]> {
+  const res = await fetch(`${API_BASE}/videos`);
+  if (!res.ok) throw new Error('Failed to fetch videos');
+  return res.json();
+}
+
+// ------------------------------------------------------------------
 // SSE / Transcription progress
 // ------------------------------------------------------------------
 

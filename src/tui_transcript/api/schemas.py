@@ -175,3 +175,125 @@ class BrowseResponse(BaseModel):
     current: str
     parent: str | None
     children: list[BrowseEntry]
+
+
+# ------------------------------------------------------------------
+# Collections
+# ------------------------------------------------------------------
+
+
+class CollectionCreate(BaseModel):
+    """Payload for creating a collection."""
+
+    name: str = Field(..., min_length=1)
+    collection_type: str = "other"
+    description: str = ""
+
+
+class CollectionUpdate(BaseModel):
+    """Partial update for a collection."""
+
+    name: str | None = None
+    collection_type: str | None = None
+    description: str | None = None
+
+
+class CollectionEntry(BaseModel):
+    """A collection in list responses."""
+
+    id: int
+    name: str
+    collection_type: str
+    description: str
+    item_count: int = 0
+    created_at: str
+    updated_at: str
+
+
+class CollectionItemEntry(BaseModel):
+    """A video/transcript inside a collection."""
+
+    id: int
+    source_path: str
+    output_title: str
+    output_path: str | None
+    language: str | None
+    processed_at: str
+    position: int
+    tags: list[dict] = []
+
+
+class CollectionDetail(BaseModel):
+    """Full collection with its items."""
+
+    id: int
+    name: str
+    collection_type: str
+    description: str
+    created_at: str
+    updated_at: str
+    items: list[CollectionItemEntry] = []
+
+
+class CollectionAddItems(BaseModel):
+    """Add videos to a collection."""
+
+    video_ids: list[int] = Field(..., min_length=1)
+
+
+class CollectionReorder(BaseModel):
+    """Reorder items in a collection."""
+
+    video_ids: list[int] = Field(..., min_length=1)
+
+
+# ------------------------------------------------------------------
+# Tags
+# ------------------------------------------------------------------
+
+
+class TagCreate(BaseModel):
+    """Payload for creating a tag."""
+
+    name: str = Field(..., min_length=1)
+    color: str = "#6b7280"
+
+
+class TagEntry(BaseModel):
+    """A tag."""
+
+    id: int
+    name: str
+    color: str
+
+
+class TagAssign(BaseModel):
+    """Assign a tag to a video."""
+
+    tag_id: int
+
+
+# ------------------------------------------------------------------
+# Search
+# ------------------------------------------------------------------
+
+
+class SearchResult(BaseModel):
+    """A single search result."""
+
+    video_id: int
+    output_title: str
+    source_path: str
+    excerpt: str
+    rank: float = 0.0
+
+
+class VideoEntry(BaseModel):
+    """A processed video for selection UIs."""
+
+    id: int
+    source_path: str
+    output_title: str
+    output_path: str | None
+    language: str | None
+    processed_at: str

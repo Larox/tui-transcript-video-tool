@@ -37,6 +37,48 @@ class KeyMoment:
     description: str
 
 
+COLLECTION_TYPES = ("course", "mentorship", "tutorship", "academic", "other")
+
+
+@dataclass
+class Collection:
+    id: int
+    name: str
+    collection_type: str  # one of COLLECTION_TYPES
+    description: str = ""
+    item_count: int = 0
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class Tag:
+    id: int
+    name: str
+    color: str = "#6b7280"
+
+
+@dataclass
+class CollectionItem:
+    id: int
+    source_path: str
+    output_title: str
+    output_path: str
+    language: str
+    processed_at: str
+    position: int = 0
+    tags: list[Tag] = field(default_factory=list)
+
+
+@dataclass
+class SearchResult:
+    video_id: int
+    output_title: str
+    source_path: str
+    excerpt: str
+    rank: float = 0.0
+
+
 LANGUAGES: dict[str, str] = {
     "es": "Spanish",
     "en": "English",

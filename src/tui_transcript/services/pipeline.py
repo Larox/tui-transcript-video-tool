@@ -227,6 +227,18 @@ async def run_pipeline(
                         level=LogLevel.DIM,
                     )
 
+                # Index transcript for full-text search
+                video_record = history.get_video_by_source_and_prefix(
+                    source_path, config.prefix, output_mode
+                )
+                if video_record and job.transcript:
+                    history.index_transcript(
+                        video_record["id"],
+                        title,
+                        source_path,
+                        job.transcript,
+                    )
+
                 if config.naming_mode == NamingMode.SEQUENTIAL:
                     next_seq += 1
 
