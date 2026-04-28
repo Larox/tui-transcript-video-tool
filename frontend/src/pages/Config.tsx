@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { FolderOpen, FolderSearch } from 'lucide-react';
-import { getConfig, putConfig, openPath, pickDirectory, type Config, type ConfigUpdate } from '@/api/client';
+import { getConfig, putConfig, type Config, type ConfigUpdate } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,16 +28,10 @@ export function Config() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!(values.course_name ?? '').trim()) {
-      alert('Course Name is required.');
-      return;
-    }
     const update: ConfigUpdate = {};
     if (form.deepgram_api_key !== undefined) update.deepgram_api_key = form.deepgram_api_key;
     if (form.naming_mode !== undefined) update.naming_mode = form.naming_mode;
     if (form.prefix !== undefined) update.prefix = form.prefix;
-    if (form.course_name !== undefined) update.course_name = form.course_name;
-    if (form.markdown_output_dir !== undefined) update.markdown_output_dir = form.markdown_output_dir;
     if (form.anthropic_api_key !== undefined) update.anthropic_api_key = form.anthropic_api_key;
     mutation.mutate(update);
   };
@@ -82,53 +75,6 @@ export function Config() {
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="md_dir">Markdown Output Directory</Label>
-            <div className="flex gap-2">
-              <Input
-                id="md_dir"
-                type="text"
-                placeholder="./output"
-                value={values.markdown_output_dir ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, markdown_output_dir: e.target.value }))}
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                title="Browse for directory"
-                onClick={async () => {
-                  try {
-                    const picked = await pickDirectory();
-                    if (picked) setForm((f) => ({ ...f, markdown_output_dir: picked }));
-                  } catch (e) {
-                    alert((e as Error).message);
-                  }
-                }}
-              >
-                <FolderSearch className="size-4 mr-1.5" />
-                Browse
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                title="Open in file manager"
-                onClick={async () => {
-                  const path = values.markdown_output_dir?.trim() || './output';
-                  try {
-                    await openPath(path);
-                  } catch (e) {
-                    alert((e as Error).message);
-                  }
-                }}
-              >
-                <FolderOpen className="size-4" />
-              </Button>
-            </div>
-          </div>
-
           <div className="space-y-3">
             <Label>Naming Mode</Label>
             <RadioGroup
@@ -159,18 +105,6 @@ export function Config() {
               placeholder="Transcripcion"
               value={values.prefix ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, prefix: e.target.value }))}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="course_name">Course Name *</Label>
-            <Input
-              id="course_name"
-              type="text"
-              placeholder="Introduction to Python"
-              value={values.course_name ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, course_name: e.target.value }))}
-              required
             />
           </div>
 
