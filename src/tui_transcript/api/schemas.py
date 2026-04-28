@@ -6,24 +6,28 @@ from pydantic import BaseModel, Field
 
 
 class ConfigResponse(BaseModel):
-    """Config for GET. API key is masked."""
+    """Config for GET. API key is masked.
+
+    Note: markdown_output_dir and course_name are no longer surfaced —
+    output destination is chosen per-batch via the directories registry.
+    """
+
+    model_config = {"extra": "forbid"}
 
     deepgram_api_key: str = ""  # Masked as "***" when set
     naming_mode: str = "sequential"
     prefix: str = "Transcripcion"
-    course_name: str = ""
-    markdown_output_dir: str = "./output"
     anthropic_api_key: str = ""  # Masked as "***" when set
 
 
 class ConfigUpdate(BaseModel):
     """Partial config update for PUT."""
 
+    model_config = {"extra": "forbid"}
+
     deepgram_api_key: str | None = None
     naming_mode: str | None = None
     prefix: str | None = None
-    course_name: str | None = None
-    markdown_output_dir: str | None = None
     anthropic_api_key: str | None = None
 
 

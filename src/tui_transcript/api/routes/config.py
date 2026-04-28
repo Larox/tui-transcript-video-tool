@@ -23,14 +23,12 @@ def _mask_key(key: str) -> str:
 
 @router.get("", response_model=ConfigResponse)
 def get_config() -> ConfigResponse:
-    """Get current config. Deepgram key is masked."""
+    """Get current config. API keys are masked."""
     config = EnvConfigStore().load()
     return ConfigResponse(
         deepgram_api_key=_mask_key(config.deepgram_api_key) if config.deepgram_api_key else "",
         naming_mode=config.naming_mode.value,
         prefix=config.prefix,
-        course_name=config.course_name,
-        markdown_output_dir=config.markdown_output_dir,
         anthropic_api_key=_mask_key(config.anthropic_api_key) if config.anthropic_api_key else "",
     )
 
@@ -50,18 +48,8 @@ def put_config(update: ConfigUpdate) -> dict:
             raise HTTPException(400, f"Invalid naming_mode: {update.naming_mode}")
     if update.prefix is not None:
         config.prefix = update.prefix
-    if update.course_name is not None:
-        config.course_name = update.course_name
-    if update.markdown_output_dir is not None:
-        config.markdown_output_dir = update.markdown_output_dir
     if update.anthropic_api_key is not None:
         config.anthropic_api_key = update.anthropic_api_key
-
-    if not config.course_name.strip():
-        raise HTTPException(
-            400,
-            "Course name is required",
-        )
 
     store.save(config)
     return {"ok": True}
