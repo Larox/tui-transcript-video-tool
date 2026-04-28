@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
@@ -39,6 +40,8 @@ async def _run_pipeline_with_sse(
     config,
     jobs: list[VideoJob],
     queue: asyncio.Queue,
+    output_dir: Path,
+    course_name: str,
 ) -> None:
     """Run pipeline, pushing events to queue."""
 
@@ -56,7 +59,13 @@ async def _run_pipeline_with_sse(
             queue.put_nowait({"type": "status_label", "label": label})
 
     try:
-        await run_pipeline(config, jobs, callbacks=SSECallbacks())
+        await run_pipeline(
+            config,
+            jobs,
+            callbacks=SSECallbacks(),
+            output_dir=output_dir,
+            course_name=course_name,
+        )
     finally:
         queue.put_nowait({"type": "done"})
         complete_session(session_id)
@@ -68,6 +77,24 @@ async def start_transcription(req: TranscriptionStartRequest) -> TranscriptionSt
     config = EnvConfigStore().load()
     if not config.deepgram_api_key:
         raise HTTPException(400, "Deepgram API key not configured")
+
+    from tui_transcript.services.history import HistoryDB
+
+    db = HistoryDB()
+    try:
+        directory = db.get_directory(req.directory_id)
+    finally:
+        db.close()
+
+    if directory is None:
+        raise HTTPException(404, f"Directory id {req.directory_id} not found")
+
+    dir_path = Path(directory["path"])
+    if not dir_path.is_dir():
+        raise HTTPException(
+            422,
+            f"Class folder missing at {directory['path']}. Please re-attach in Documents.",
+        )
 
     jobs: list[VideoJob] = []
     for spec in req.files:
@@ -85,7 +112,14 @@ async def start_transcription(req: TranscriptionStartRequest) -> TranscriptionSt
     session_id = create_session(queue, jobs)
 
     task = asyncio.create_task(
-        _run_pipeline_with_sse(session_id, config, jobs, queue),
+        _run_pipeline_with_sse(
+            session_id,
+            config,
+            jobs,
+            queue,
+            output_dir=dir_path,
+            course_name=directory["name"],
+        ),
     )
     set_session_task(session_id, task)
 
