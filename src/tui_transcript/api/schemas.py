@@ -52,6 +52,7 @@ class TranscriptionStartRequest(BaseModel):
     """Request to start transcription."""
 
     files: list[FileSpec] = Field(..., min_length=1)
+    directory_id: int = Field(..., description="ID of the registered output directory (a 'class')")
 
 
 class TranscriptionStartResponse(BaseModel):
