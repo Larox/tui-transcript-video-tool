@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from tui_transcript.api.main import app
-from tui_transcript.models import TranscriptResult
 from tui_transcript.services.history import HistoryDB
 
 _orig_init = HistoryDB.__init__
