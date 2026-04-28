@@ -4,8 +4,6 @@ export interface Config {
   deepgram_api_key: string;
   naming_mode: string;
   prefix: string;
-  course_name: string;
-  markdown_output_dir: string;
   anthropic_api_key: string;
 }
 
@@ -13,8 +11,6 @@ export interface ConfigUpdate {
   deepgram_api_key?: string;
   naming_mode?: string;
   prefix?: string;
-  course_name?: string;
-  markdown_output_dir?: string;
   anthropic_api_key?: string;
 }
 
@@ -83,12 +79,13 @@ export async function uploadFiles(files: File[]): Promise<UploadedFile[]> {
 }
 
 export async function startTranscription(
-  fileSpecs: FileSpec[]
+  fileSpecs: FileSpec[],
+  directoryId: number
 ): Promise<{ session_id: string }> {
   const res = await fetch(`${API_BASE}/transcription/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ files: fileSpecs }),
+    body: JSON.stringify({ files: fileSpecs, directory_id: directoryId }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
