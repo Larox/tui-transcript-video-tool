@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { useState, useCallback, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   getConfig,
   uploadFiles,
@@ -7,13 +7,15 @@ import {
   subscribeToProgress,
   getTranscriptionStatus,
   openPath,
+  getDirectories,
   type UploadedFile,
   type FileSpec,
   type SSEEvent,
   type JobStatus,
   type KeyMoment,
+  type DirectoryEntry,
 } from '@/api/client';
-import { FolderOpen, Loader2, Sparkles } from 'lucide-react';
+import { FolderOpen, Loader2, Plus, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -23,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DirectoryForm } from '@/components/DirectoryForm';
 
 const LANGUAGES = [
   { code: 'es', name: 'Spanish' },
@@ -37,6 +40,24 @@ type FileWithLang = UploadedFile & { language: string };
 
 export function Dashboard() {
   const { data: config } = useQuery({ queryKey: ['config'], queryFn: getConfig });
+  const queryClient = useQueryClient();
+  const { data: directories = [] } = useQuery({
+    queryKey: ['directories'],
+    queryFn: getDirectories,
+  });
+
+  const [directoryId, setDirectoryId] = useState<number | null>(() => {
+    const stored = localStorage.getItem('transcribe.lastDirectoryId');
+    return stored ? Number(stored) : null;
+  });
+  const [showNewClass, setShowNewClass] = useState(false);
+
+  useEffect(() => {
+    if (directoryId != null) {
+      localStorage.setItem('transcribe.lastDirectoryId', String(directoryId));
+    }
+  }, [directoryId]);
+
   const [files, setFiles] = useState<FileWithLang[]>([]);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -102,13 +123,22 @@ export function Dashboard() {
       alert('Configure your Deepgram API key in Settings first.');
       return;
     }
+    if (directoryId == null) {
+      alert('Select a class first.');
+      return;
+    }
+    const dir = directories.find((d) => d.id === directoryId);
+    if (!dir || !dir.exists) {
+      alert('Selected class folder is missing — re-attach it in Documents.');
+      return;
+    }
     setProcessing(true);
     setLogs([]);
     setJobs({});
     setStatusLabel('Starting...');
     try {
       const specs: FileSpec[] = files.map((f) => ({ id: f.id, language: f.language }));
-      const { session_id } = await startTranscription(specs);
+      const { session_id } = await startTranscription(specs, directoryId);
 
       subscribeToProgress(
         session_id,
@@ -170,8 +200,58 @@ export function Dashboard() {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Transcribe</h2>
-        <p className="text-sm text-muted-foreground">Output: Local Markdown</p>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Class</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Select
+              value={directoryId != null ? String(directoryId) : ''}
+              onValueChange={(v) => setDirectoryId(Number(v))}
+              disabled={processing}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Select a class..." />
+              </SelectTrigger>
+              <SelectContent>
+                {directories
+                  .filter((d: DirectoryEntry) => d.exists)
+                  .map((d: DirectoryEntry) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowNewClass((v) => !v)}
+              disabled={processing}
+            >
+              <Plus className="size-4 mr-1.5" />
+              New class
+            </Button>
+          </div>
+          {showNewClass && (
+            <div className="rounded-md border p-3">
+              <DirectoryForm
+                idPrefix="transcribe-add"
+                onSubmit={(entry) => {
+                  queryClient.invalidateQueries({ queryKey: ['directories'] });
+                  setDirectoryId(entry.id);
+                  setShowNewClass(false);
+                }}
+                onCancel={() => setShowNewClass(false)}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div
         className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
