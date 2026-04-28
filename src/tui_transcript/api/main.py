@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import os
+from pathlib import Path
+
 import uvicorn
 
 from fastapi import FastAPI
@@ -18,6 +22,34 @@ from tui_transcript.api.routes import (
     transcription,
 )
 
+logger = logging.getLogger(__name__)
+
+
+def auto_register_legacy_output_dir() -> None:
+    """If no directories are registered yet but MARKDOWN_OUTPUT_DIR is set
+    and exists on disk, register it once so existing TUI users don't lose
+    their setup when they open the web app.
+    """
+    from tui_transcript.services.history import HistoryDB
+
+    legacy_path = os.environ.get("MARKDOWN_OUTPUT_DIR", "").strip()
+    if not legacy_path:
+        return
+    p = Path(legacy_path).expanduser().resolve()
+    if not p.is_dir():
+        return
+
+    db = HistoryDB()
+    try:
+        if db.list_directories():
+            return
+        name = os.environ.get("COURSE_NAME", "").strip() or "Default"
+        db.register_directory(name, str(p))
+        logger.info("Auto-registered legacy output dir %s as '%s'", p, name)
+    finally:
+        db.close()
+
+
 app = FastAPI(
     title="TUI Transcript API",
     description="Transcribe video/audio via Deepgram, export to Markdown",
@@ -31,6 +63,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    auto_register_legacy_output_dir()
+
 
 app.include_router(collections.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
