@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -50,10 +51,17 @@ def auto_register_legacy_output_dir() -> None:
         db.close()
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    auto_register_legacy_output_dir()
+    yield
+
+
 app = FastAPI(
     title="TUI Transcript API",
     description="Transcribe video/audio via Deepgram, export to Markdown",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -63,11 +71,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def _on_startup() -> None:
-    auto_register_legacy_output_dir()
 
 
 app.include_router(collections.router, prefix="/api")
