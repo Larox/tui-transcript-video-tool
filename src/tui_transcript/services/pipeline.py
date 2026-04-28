@@ -69,10 +69,16 @@ async def run_pipeline(
     config: AppConfig,
     jobs: list[VideoJob],
     callbacks: PipelineCallbacks | None = None,
+    output_dir: Path | None = None,
+    course_name: str | None = None,
 ) -> None:
     """Run the transcription + export pipeline for pending jobs.
 
     Mutates jobs in place. Callbacks are invoked for progress, logs, and status.
+
+    When ``output_dir`` is provided, transcripts are written there instead of
+    ``config.markdown_output_dir``. When ``course_name`` is provided it overrides
+    ``config.course_name`` for the markdown frontmatter.
     """
     cb = callbacks or DefaultPipelineCallbacks()
     pending = [j for j in jobs if j.status == JobStatus.PENDING]
@@ -80,7 +86,9 @@ async def run_pipeline(
         return
 
     from tui_transcript.services.markdown_export import MarkdownExporter
-    exporter = MarkdownExporter(config.markdown_output_dir)
+    effective_output_dir = str(output_dir) if output_dir is not None else config.markdown_output_dir
+    effective_course_name = course_name if course_name is not None else config.course_name
+    exporter = MarkdownExporter(effective_output_dir)
     history = HistoryDB()
     output_mode = "markdown"
     next_seq = history.get_next_sequential_number(config.prefix)
@@ -191,7 +199,7 @@ async def run_pipeline(
                     title,
                     job.transcript,
                     date=date_str,
-                    course_name=config.course_name,
+                    course_name=effective_course_name,
                     duration_minutes=duration_min,
                     key_moments=key_moments_dicts or None,
                     highlights_id=highlights_slug,
@@ -217,7 +225,7 @@ async def run_pipeline(
                 )
 
                 doc_store = DocumentStore(db=history)
-                doc_store.ensure_registered(config.markdown_output_dir)
+                doc_store.ensure_registered(effective_output_dir)
                 if key_moments_dicts and highlights_slug and job.output_path:
                     history.save_highlights(
                         highlights_slug, job.output_path, key_moments_dicts
