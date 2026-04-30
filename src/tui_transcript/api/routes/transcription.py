@@ -75,8 +75,26 @@ async def _run_pipeline_with_sse(
 async def start_transcription(req: TranscriptionStartRequest) -> TranscriptionStartResponse:
     """Start transcription for uploaded files. Returns session_id for progress stream."""
     config = EnvConfigStore().load()
-    if not config.deepgram_api_key:
+
+    # Validate engine-specific requirements before doing any work.
+    needs_deepgram = any(spec.engine == "deepgram" for spec in req.files)
+    if needs_deepgram and not config.deepgram_api_key:
         raise HTTPException(400, "Deepgram API key not configured")
+
+    from tui_transcript.services.transcription import models as local_models
+
+    for spec in req.files:
+        if spec.engine == "whisper_local":
+            if not spec.whisper_model:
+                raise HTTPException(
+                    400, "whisper_model is required when engine='whisper_local'"
+                )
+            if not local_models.is_downloaded(spec.whisper_model):
+                raise HTTPException(
+                    400,
+                    f"Model '{spec.whisper_model}' is not downloaded. "
+                    "Download it in Settings.",
+                )
 
     from tui_transcript.services.history import HistoryDB
 
@@ -105,6 +123,8 @@ async def start_transcription(req: TranscriptionStartRequest) -> TranscriptionSt
             path=upload["path"],
             language=spec.language,
             status=JobStatus.PENDING,
+            engine=spec.engine,
+            whisper_model=spec.whisper_model,
         )
         jobs.append(job)
 

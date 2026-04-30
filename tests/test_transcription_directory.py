@@ -131,3 +131,83 @@ def test_start_passes_dir_and_name_to_pipeline(client, tmp_path):
 
     assert captured["output_dir"] == (tmp_path / "Algorithms")
     assert captured["course_name"] == "Algorithms"
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for engine/model validation tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def registered_dir(client, tmp_path) -> int:
+    return _register_dir(client, tmp_path)
+
+
+@pytest.fixture()
+def uploaded(client, tmp_path) -> str:
+    return _upload_file(client, tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Engine/model validation tests
+# ---------------------------------------------------------------------------
+
+
+def test_start_requires_whisper_model_when_engine_is_local(client, registered_dir, uploaded):
+    payload = {
+        "files": [{"id": uploaded, "language": "en", "engine": "whisper_local"}],
+        "directory_id": registered_dir,
+    }
+    res = client.post("/api/transcription/start", json=payload)
+    assert res.status_code == 400
+    assert "whisper_model" in res.text.lower()
+
+
+def test_start_requires_downloaded_model(client, registered_dir, uploaded, monkeypatch):
+    from tui_transcript.services.transcription import models
+    monkeypatch.setattr(models, "is_downloaded", lambda name: False)
+
+    payload = {
+        "files": [
+            {
+                "id": uploaded,
+                "language": "en",
+                "engine": "whisper_local",
+                "whisper_model": "large-v3",
+            }
+        ],
+        "directory_id": registered_dir,
+    }
+    res = client.post("/api/transcription/start", json=payload)
+    assert res.status_code == 400
+    assert "not downloaded" in res.text.lower()
+
+
+def test_start_accepts_local_engine_when_model_downloaded(
+    client, registered_dir, uploaded, monkeypatch
+):
+    from tui_transcript.services.transcription import models
+    monkeypatch.setattr(models, "is_downloaded", lambda name: True)
+
+    payload = {
+        "files": [
+            {
+                "id": uploaded,
+                "language": "en",
+                "engine": "whisper_local",
+                "whisper_model": "small",
+            }
+        ],
+        "directory_id": registered_dir,
+    }
+    res = client.post("/api/transcription/start", json=payload)
+    assert res.status_code == 200
+
+
+def test_start_unknown_engine_is_rejected(client, registered_dir, uploaded):
+    payload = {
+        "files": [{"id": uploaded, "language": "en", "engine": "bogus"}],
+        "directory_id": registered_dir,
+    }
+    res = client.post("/api/transcription/start", json=payload)
+    assert res.status_code == 422  # pydantic Literal validation
