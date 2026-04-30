@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   Select,
   SelectContent,
@@ -55,26 +56,36 @@ export function EngineSelect({
       </Select>
 
       {engine === 'whisper_local' && (
-        <Select
-          value={whisperModel ?? ''}
-          onValueChange={(v) => onWhisperModelChange(v as WhisperModelName)}
-          disabled={disabled || downloaded.length === 0}
-        >
-          <SelectTrigger className="w-[120px] h-8">
-            <SelectValue
-              placeholder={
-                downloaded.length === 0 ? 'No models' : 'Pick model'
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {downloaded.map((m) => (
-              <SelectItem key={m.name} value={m.name}>
-                {m.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <>
+          <Select
+            value={whisperModel ?? ''}
+            onValueChange={(v) => onWhisperModelChange(v as WhisperModelName)}
+            disabled={disabled || downloaded.length === 0}
+          >
+            <SelectTrigger className="w-[120px] h-8">
+              <SelectValue
+                placeholder={
+                  downloaded.length === 0 ? 'No models' : 'Pick model'
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {downloaded.map((m) => (
+                <SelectItem key={m.name} value={m.name}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {downloaded.length === 0 && (
+            <Link
+              to="/config"
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              Download models in Settings
+            </Link>
+          )}
+        </>
       )}
     </div>
   );

@@ -126,19 +126,21 @@ class WhisperTranscriber:
             _notify("Running local Whisper transcription...")
 
             def _run():
-                return model.transcribe(
+                segments_iter, info = model.transcribe(
                     str(source_path),
                     language=whisper_lang,
                     vad_filter=True,
                     beam_size=5,
                 )
+                # Consume the generator inside the thread so decoding doesn't
+                # block the event loop. Progress can only be reported after
+                # the run completes.
+                return list(segments_iter), info
 
-            segments_iter, info = await asyncio.to_thread(_run)
+            collected, info = await asyncio.to_thread(_run)
 
-            collected = []
             duration = getattr(info, "duration", 0.0) or 0.0
-            for seg in segments_iter:
-                collected.append(seg)
+            for seg in collected:
                 if duration > 0:
                     pct = min(100, int((seg.end / duration) * 100))
                     _notify(f"  {seg.end:.0f}s/{duration:.0f}s ({pct}%)")
