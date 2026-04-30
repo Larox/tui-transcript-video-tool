@@ -5,6 +5,7 @@ import asyncio
 from typing import Callable
 
 from huggingface_hub import scan_cache_dir, snapshot_download
+from huggingface_hub.errors import CacheNotFound
 
 # name -> (HF repo_id, approx size in MB)
 LOCAL_MODELS: dict[str, tuple[str, int]] = {
@@ -31,7 +32,10 @@ def is_downloaded(name: str) -> bool:
     if name not in LOCAL_MODELS:
         return False
     repo_id, _ = LOCAL_MODELS[name]
-    cache = scan_cache_dir()
+    try:
+        cache = scan_cache_dir()
+    except CacheNotFound:
+        return False
     return any(r.repo_id == repo_id for r in cache.repos)
 
 
@@ -62,7 +66,10 @@ async def remove(name: str) -> None:
     repo_id, _ = LOCAL_MODELS[name]
 
     def _delete() -> None:
-        cache = scan_cache_dir()
+        try:
+            cache = scan_cache_dir()
+        except CacheNotFound:
+            return
         for repo in cache.repos:
             if repo.repo_id == repo_id:
                 strategy = repo.delete()
