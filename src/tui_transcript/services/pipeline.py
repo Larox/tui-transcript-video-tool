@@ -23,7 +23,7 @@ from tui_transcript.services.document_store import DocumentStore
 from tui_transcript.services.history import HistoryDB
 from tui_transcript.services.media_utils import get_media_duration_seconds
 from tui_transcript.services.key_moments import extract_key_moments
-from tui_transcript.services.transcription import transcribe
+from tui_transcript.services.transcription import get_transcriber
 
 logger = logging.getLogger(__name__)
 
@@ -136,8 +136,12 @@ async def run_pipeline(
                 def _on_status(msg: str) -> None:
                     cb.on_log(f"  {msg}", level=LogLevel.DIM)
 
-                transcript_result = await transcribe(
-                    config.deepgram_api_key,
+                transcriber = get_transcriber(
+                    job.engine,
+                    model=job.whisper_model,
+                    deepgram_api_key=config.deepgram_api_key,
+                )
+                transcript_result = await transcriber.transcribe(
                     job.path,
                     language=job.language,
                     on_status=_on_status,

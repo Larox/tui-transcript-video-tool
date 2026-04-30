@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { LocalModelsPanel } from '@/components/LocalModelsPanel';
 
 export function Config() {
   const queryClient = useQueryClient();
@@ -42,6 +43,7 @@ export function Config() {
   if (error) return <div className="p-4 text-destructive">Failed to load config: {(error as Error).message}</div>;
 
   return (
+    <div className="space-y-6">
     <Card>
       <CardHeader>
         <CardTitle>Settings</CardTitle>
@@ -117,5 +119,7 @@ export function Config() {
         </form>
       </CardContent>
     </Card>
+    <LocalModelsPanel />
+    </div>
   );
 }

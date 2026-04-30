@@ -17,6 +17,7 @@ from tui_transcript.api.routes import (
     config,
     documents,
     files,
+    models,
     paths,
     search,
     tags,
@@ -77,10 +78,11 @@ app.include_router(collections.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
+app.include_router(models.router, prefix="/api")
+app.include_router(paths.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(tags.router, prefix="/api")
 app.include_router(transcription.router, prefix="/api")
-app.include_router(paths.router, prefix="/api")
 
 
 @app.get("/")

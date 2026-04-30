@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -44,10 +46,12 @@ class UploadResponse(BaseModel):
 
 
 class FileSpec(BaseModel):
-    """File + language for transcription start."""
+    """File + language + engine for transcription start."""
 
     id: str
     language: str = "es"
+    engine: Literal["deepgram", "whisper_local"] = "deepgram"
+    whisper_model: Literal["small", "medium", "large-v3"] | None = None
 
 
 class TranscriptionStartRequest(BaseModel):

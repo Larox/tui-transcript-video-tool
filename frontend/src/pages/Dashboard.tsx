@@ -14,7 +14,10 @@ import {
   type JobStatus,
   type KeyMoment,
   type DirectoryEntry,
+  type Engine,
+  type WhisperModelName,
 } from '@/api/client';
+import { EngineSelect } from '@/components/EngineSelect';
 import { FolderOpen, Loader2, Plus, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,7 +39,11 @@ const LANGUAGES = [
   { code: 'de', name: 'German' },
 ] as const;
 
-type FileWithLang = UploadedFile & { language: string };
+type FileWithLang = UploadedFile & {
+  language: string;
+  engine: Engine;
+  whisperModel?: WhisperModelName;
+};
 
 export function Dashboard() {
   const { data: config } = useQuery({ queryKey: ['config'], queryFn: getConfig });
@@ -82,7 +89,7 @@ export function Dashboard() {
       const uploaded = await uploadFiles(valid);
       setFiles((prev) => [
         ...prev,
-        ...uploaded.map((u) => ({ ...u, language: 'es' })),
+        ...uploaded.map((u) => ({ ...u, language: 'es', engine: 'deepgram' as Engine, whisperModel: undefined })),
       ]);
     } catch (e) {
       alert((e as Error).message);
@@ -117,10 +124,34 @@ export function Dashboard() {
     );
   };
 
+  const setFileEngine = (id: string, engine: Engine) => {
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === id
+          ? { ...f, engine, whisperModel: engine === 'deepgram' ? undefined : f.whisperModel }
+          : f
+      )
+    );
+  };
+
+  const setFileWhisperModel = (id: string, model: WhisperModelName | undefined) => {
+    setFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, whisperModel: model } : f))
+    );
+  };
+
   const start = async () => {
     if (!files.length || processing) return;
-    if (!config?.deepgram_api_key || config.deepgram_api_key === '***') {
+    const needsDeepgram = files.some((f) => f.engine === 'deepgram');
+    if (needsDeepgram && (!config?.deepgram_api_key || config.deepgram_api_key === '***')) {
       alert('Configure your Deepgram API key in Settings first.');
+      return;
+    }
+    const localMissingModel = files.find(
+      (f) => f.engine === 'whisper_local' && !f.whisperModel
+    );
+    if (localMissingModel) {
+      alert(`Pick a Whisper model for ${localMissingModel.name}.`);
       return;
     }
     if (directoryId == null) {
@@ -137,7 +168,12 @@ export function Dashboard() {
     setJobs({});
     setStatusLabel('Starting...');
     try {
-      const specs: FileSpec[] = files.map((f) => ({ id: f.id, language: f.language }));
+      const specs: FileSpec[] = files.map((f) => ({
+        id: f.id,
+        language: f.language,
+        engine: f.engine,
+        whisper_model: f.whisperModel,
+      }));
       const { session_id } = await startTranscription(specs, directoryId);
 
       subscribeToProgress(
@@ -307,6 +343,13 @@ export function Dashboard() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <EngineSelect
+                        engine={f.engine}
+                        whisperModel={f.whisperModel}
+                        onEngineChange={(e) => setFileEngine(f.id, e)}
+                        onWhisperModelChange={(m) => setFileWhisperModel(f.id, m)}
+                        disabled={processing}
+                      />
                       {(() => {
                         const job = Object.values(jobs).find((j) => j.path.endsWith(f.name));
                         const status = job?.status ?? 'pending';
