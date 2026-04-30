@@ -1,13 +1,10 @@
-"""Transcription engines. Public API: get_transcriber, Transcriber, TranscriberError."""
+"""Transcription engines. Public API: get_transcriber, transcribe, Transcriber, TranscriberError."""
 from __future__ import annotations
 
 from tui_transcript.services.transcription.base import (
     Transcriber,
     TranscriberError,
 )
-
-# Back-compat re-export. Will be replaced in Task 3 when DeepgramTranscriber lands.
-from tui_transcript.services._transcription_legacy import transcribe  # noqa: F401
 
 __all__ = ["Transcriber", "TranscriberError", "get_transcriber", "transcribe"]
 
@@ -36,3 +33,15 @@ def get_transcriber(
         )
         return WhisperTranscriber(model)
     raise TranscriberError(f"Unknown engine: {engine}")
+
+
+async def transcribe(api_key: str, file_path, *, language: str = "es", on_status=None):
+    """Back-compat shim — delegates to DeepgramTranscriber.
+
+    Existing callers of `from tui_transcript.services.transcription import transcribe`
+    keep working. New code should use `get_transcriber()` instead.
+    """
+    from tui_transcript.services.transcription.deepgram import DeepgramTranscriber
+    return await DeepgramTranscriber(api_key).transcribe(
+        file_path, language=language, on_status=on_status
+    )
