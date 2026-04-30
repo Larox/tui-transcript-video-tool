@@ -20,9 +20,14 @@ export interface UploadedFile {
   size_bytes: number;
 }
 
+export type Engine = 'deepgram' | 'whisper_local';
+export type WhisperModelName = 'small' | 'medium' | 'large-v3';
+
 export interface FileSpec {
   id: string;
   language: string;
+  engine?: Engine;
+  whisper_model?: WhisperModelName;
 }
 
 export interface KeyMoment {
@@ -470,6 +475,87 @@ export async function getVideos(): Promise<VideoEntry[]> {
   const res = await fetch(`${API_BASE}/videos`);
   if (!res.ok) throw new Error('Failed to fetch videos');
   return res.json();
+}
+
+// ------------------------------------------------------------------
+// Local Whisper models
+// ------------------------------------------------------------------
+
+export interface LocalModelInfo {
+  name: WhisperModelName;
+  repo_id: string;
+  size_mb: number;
+  downloaded: boolean;
+}
+
+export async function listLocalModels(): Promise<LocalModelInfo[]> {
+  const res = await fetch(`${API_BASE}/models/local`);
+  if (!res.ok) throw new Error('Failed to list local models');
+  return res.json();
+}
+
+export async function deleteLocalModel(name: WhisperModelName): Promise<void> {
+  const res = await fetch(`${API_BASE}/models/local/${name}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to delete model');
+  }
+}
+
+export type ModelDownloadEvent =
+  | { type: 'progress'; progress: number }
+  | { type: 'done' }
+  | { type: 'error'; message: string };
+
+export function subscribeToModelDownload(
+  name: WhisperModelName,
+  onEvent: (event: ModelDownloadEvent) => void,
+  onError?: (err: Error) => void
+): () => void {
+  let cancelled = false;
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/models/local/${name}/download`, {
+        method: 'POST',
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Download failed');
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (!cancelled) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() ?? '';
+        for (const block of events) {
+          const dataLine = block.split('\n').find((l) => l.startsWith('data:'));
+          if (!dataLine) continue;
+          try {
+            const payload = JSON.parse(dataLine.slice(5).trim());
+            onEvent(payload);
+          } catch {
+            // skip parse errors
+          }
+        }
+      }
+    } catch (e) {
+      if (!cancelled) onError?.(e as Error);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    controller.abort();
+  };
 }
 
 // ------------------------------------------------------------------
