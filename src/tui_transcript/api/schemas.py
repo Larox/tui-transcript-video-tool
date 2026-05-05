@@ -394,6 +394,23 @@ class TrueFalseResponse(BaseModel):
     items: list[TrueFalseItem]
 
 
+class ErrorDetectionItem(BaseModel):
+    """A single error-detection item."""
+
+    id: int
+    statement: str
+    error: str
+    correction: str
+    explanation: str = ''
+    starred: bool = False
+
+
+class ErrorDetectionResponse(BaseModel):
+    """Response for GET /classes/{video_id}/error-detection."""
+
+    items: list[ErrorDetectionItem]
+
+
 # ------------------------------------------------------------------
 # Dashboard
 # ------------------------------------------------------------------

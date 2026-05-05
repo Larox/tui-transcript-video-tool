@@ -10,7 +10,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Brain, ArrowLeft, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
 import { getCollections, getCollection, type CollectionEntry, type CollectionItemEntry } from '@/api/client';
-import { getFlashcards, getQA, getFillInBlank, getTrueFalse, logActivity, type Flashcard, type QAPair, type FillInBlankItem as ApiFillInBlankItem, type TrueFalseItem as ApiTrueFalseItem } from '@/api/learning';
+import { getFlashcards, getQA, getFillInBlank, getTrueFalse, getErrorDetection, logActivity, type Flashcard, type QAPair, type FillInBlankItem as ApiFillInBlankItem, type TrueFalseItem as ApiTrueFalseItem, type ErrorDetectionItem as ApiErrorDetectionItem } from '@/api/learning';
 import { Button } from '@/components/ui/button';
 
 // ------------------------------------------------------------------
@@ -60,7 +60,19 @@ interface TrueFalseItem {
   starred: boolean;
 }
 
-type DeckCard = FlashcardItem | QuizItem | FillInBlankItem | TrueFalseItem;
+interface ErrorDetectionItem {
+  type: 'error_detection';
+  id: string;
+  statement: string;
+  error: string;
+  correction: string;
+  explanation: string;
+  courseName: string;
+  className: string;
+  starred: boolean;
+}
+
+type DeckCard = FlashcardItem | QuizItem | FillInBlankItem | TrueFalseItem | ErrorDetectionItem;
 
 // ------------------------------------------------------------------
 // Data loading hook
@@ -86,7 +98,8 @@ function buildDeck(
   qaPairs: QAPair[],
   fillInBlanks: ApiFillInBlankItem[],
   allAnswers: string[],
-  trueFalseItems: ApiTrueFalseItem[]
+  trueFalseItems: ApiTrueFalseItem[],
+  errorDetectionItems: ApiErrorDetectionItem[]
 ): DeckCard[] {
   const cards: DeckCard[] = [];
   const { item, courseName } = classMeta;
@@ -173,6 +186,22 @@ function buildDeck(
       courseName,
       className,
       starred: tf.starred ?? false,
+    });
+  }
+
+  // ErrorDetectionCards
+  for (let i = 0; i < errorDetectionItems.length; i++) {
+    const ed = errorDetectionItems[i];
+    cards.push({
+      type: 'error_detection',
+      id: `ed-${ed.id}-${i}`,
+      statement: ed.statement,
+      error: ed.error,
+      correction: ed.correction,
+      explanation: ed.explanation,
+      courseName,
+      className,
+      starred: ed.starred ?? false,
     });
   }
 
@@ -644,6 +673,123 @@ function TrueFalseCard({
   );
 }
 
+function ErrorDetectionCard({
+  card,
+  onAnswer,
+}: {
+  card: ErrorDetectionItem;
+  onAnswer: (correct: boolean) => void;
+}) {
+  const [input, setInput] = useState('');
+  const [checked, setChecked] = useState(false);
+  const [correct, setCorrect] = useState(false);
+  const [exiting, setExiting] = useState<'left' | 'right' | null>(null);
+
+  const handleCheck = () => {
+    if (checked) return;
+    const isCorrect = input.trim().toLowerCase() === card.correction.trim().toLowerCase();
+    setCorrect(isCorrect);
+    setChecked(true);
+  };
+
+  const triggerAdvance = (isCorrect: boolean) => {
+    const dir = isCorrect ? 'right' : 'left';
+    setExiting(dir);
+    setTimeout(() => onAnswer(isCorrect), 300);
+  };
+
+  const handleNext = () => {
+    triggerAdvance(correct);
+  };
+
+  const translateX = exiting === 'left' ? -400 : exiting === 'right' ? 400 : 0;
+  const opacity = exiting ? 0 : 1;
+
+  const highlightError = (statement: string, errorText: string) => {
+    const idx = statement.indexOf(errorText);
+    if (idx === -1) return <span>{statement}</span>;
+    return (
+      <>
+        {statement.slice(0, idx)}
+        <span className="underline decoration-red-400 decoration-wavy">{errorText}</span>
+        {statement.slice(idx + errorText.length)}
+      </>
+    );
+  };
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center px-4">
+      <div
+        className="w-full max-w-sm"
+        style={{
+          transform: `translateX(${translateX}px)`,
+          opacity,
+          transition: exiting ? 'transform 0.3s ease, opacity 0.3s ease' : 'none',
+        }}
+      >
+        <div className="bg-card border rounded-2xl shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-primary/10 px-5 py-3 flex items-center gap-2">
+            <Brain className="size-4 text-primary shrink-0" />
+            <span className="text-xs font-medium text-primary truncate">{card.courseName}</span>
+            <span className="text-xs text-muted-foreground truncate">· {card.className}</span>
+            {card.starred && (
+              <span className="ml-auto text-sm" title="Importante para el examen">⭐</span>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="px-6 pt-6 pb-4">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">Detectar el Error</p>
+            <p className="text-base leading-relaxed font-medium">
+              {highlightError(card.statement, card.error)}
+            </p>
+          </div>
+
+          {/* Input */}
+          {!checked && (
+            <div className="px-5 pb-4 space-y-3">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
+                placeholder="¿Cuál es la corrección?"
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                autoFocus
+              />
+              <Button onClick={handleCheck} className="w-full" disabled={!input.trim()}>
+                Verificar
+              </Button>
+            </div>
+          )}
+
+          {/* Feedback */}
+          {checked && (
+            <div className="px-5 pb-5 space-y-3">
+              <div className={`px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 ${
+                correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              }`}>
+                {correct ? (
+                  <><CheckCircle2 className="size-4 shrink-0" /> Correcto</>
+                ) : (
+                  <><XCircle className="size-4 shrink-0" /> Corrección: {card.correction}</>
+                )}
+              </div>
+              {card.explanation && (
+                <p className="text-xs text-muted-foreground leading-relaxed px-1">{card.explanation}</p>
+              )}
+              <Button onClick={handleNext} className="w-full">
+                Siguiente
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------
 // Results screen
 // ------------------------------------------------------------------
@@ -657,6 +803,8 @@ function ResultsScreen({
   fillInTotal,
   trueFalseCorrect,
   trueFalseTotal,
+  errorDetectionCorrect,
+  errorDetectionTotal,
   onRestart,
 }: {
   totalCards: number;
@@ -667,10 +815,12 @@ function ResultsScreen({
   fillInTotal: number;
   trueFalseCorrect: number;
   trueFalseTotal: number;
+  errorDetectionCorrect: number;
+  errorDetectionTotal: number;
   onRestart: () => void;
 }) {
-  const combinedCorrect = quizCorrect + fillInCorrect + trueFalseCorrect;
-  const combinedTotal = quizTotal + fillInTotal + trueFalseTotal;
+  const combinedCorrect = quizCorrect + fillInCorrect + trueFalseCorrect + errorDetectionCorrect;
+  const combinedTotal = quizTotal + fillInTotal + trueFalseTotal + errorDetectionTotal;
   const percentage = combinedTotal > 0 ? Math.round((combinedCorrect / combinedTotal) * 100) : null;
 
   return (
@@ -709,6 +859,14 @@ function ResultsScreen({
                 {trueFalseCorrect}/{trueFalseTotal}
               </p>
               <p className="text-xs text-muted-foreground mt-1">V/F correctos</p>
+            </div>
+          )}
+          {errorDetectionTotal > 0 && (
+            <div className="bg-card border rounded-xl p-4">
+              <p className="text-3xl font-bold text-primary">
+                {errorDetectionCorrect}/{errorDetectionTotal}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Errores correctos</p>
             </div>
           )}
           {percentage !== null && (
@@ -780,6 +938,8 @@ export function Learn() {
   const [fillInTotal, setFillInTotal] = useState(0);
   const [trueFalseCorrect, setTrueFalseCorrect] = useState(0);
   const [trueFalseTotal, setTrueFalseTotal] = useState(0);
+  const [errorDetectionCorrect, setErrorDetectionCorrect] = useState(0);
+  const [errorDetectionTotal, setErrorDetectionTotal] = useState(0);
   const [finished, setFinished] = useState(false);
   const [deckSeed, setDeckSeed] = useState(0); // used to re-shuffle
 
@@ -824,11 +984,12 @@ export function Learn() {
     queryFn: async () => {
       const results = await Promise.all(
         classMetas.map(async (cm) => {
-          const [fcRes, qaRes, fibRes, tfRes] = await Promise.allSettled([
+          const [fcRes, qaRes, fibRes, tfRes, edRes] = await Promise.allSettled([
             getFlashcards(cm.item.id),
             getQA(cm.item.id),
             getFillInBlank(cm.item.id),
             getTrueFalse(cm.item.id),
+            getErrorDetection(cm.item.id),
           ]);
           return {
             meta: cm,
@@ -836,6 +997,7 @@ export function Learn() {
             qaPairs: qaRes.status === 'fulfilled' ? qaRes.value.pairs : [],
             fillInBlanks: fibRes.status === 'fulfilled' ? fibRes.value.items : [],
             trueFalseItems: tfRes.status === 'fulfilled' ? tfRes.value.items : [],
+            errorDetectionItems: edRes.status === 'fulfilled' ? edRes.value.items : [],
           };
         })
       );
@@ -853,7 +1015,7 @@ export function Learn() {
 
     const allCards: DeckCard[] = [];
     for (const result of contentQuery.data) {
-      const cards = buildDeck(result.meta, result.flashcards, result.qaPairs, result.fillInBlanks, allAnswers, result.trueFalseItems);
+      const cards = buildDeck(result.meta, result.flashcards, result.qaPairs, result.fillInBlanks, allAnswers, result.trueFalseItems, result.errorDetectionItems);
       allCards.push(...cards);
     }
 
@@ -869,6 +1031,8 @@ export function Learn() {
     setFillInTotal(0);
     setTrueFalseCorrect(0);
     setTrueFalseTotal(0);
+    setErrorDetectionCorrect(0);
+    setErrorDetectionTotal(0);
     setFinished(false);
   }, [contentQuery.data]);
 
@@ -879,6 +1043,7 @@ export function Learn() {
     if (quizTotal > 0) logActivity('quiz', quizTotal, quizCorrect);
     if (fillInTotal > 0) logActivity('fill_in_blank', fillInTotal, fillInCorrect);
     if (trueFalseTotal > 0) logActivity('true_false', trueFalseTotal, trueFalseCorrect);
+    if (errorDetectionTotal > 0) logActivity('error_detection', errorDetectionTotal, errorDetectionCorrect);
   }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const advance = useCallback(() => {
@@ -916,6 +1081,12 @@ export function Learn() {
   const handleTrueFalseAnswer = useCallback((correct: boolean) => {
     setTrueFalseTotal((n) => n + 1);
     if (correct) setTrueFalseCorrect((n) => n + 1);
+    advance();
+  }, [advance]);
+
+  const handleErrorDetectionAnswer = useCallback((correct: boolean) => {
+    setErrorDetectionTotal((n) => n + 1);
+    if (correct) setErrorDetectionCorrect((n) => n + 1);
     advance();
   }, [advance]);
 
@@ -979,6 +1150,8 @@ export function Learn() {
             fillInTotal={fillInTotal}
             trueFalseCorrect={trueFalseCorrect}
             trueFalseTotal={trueFalseTotal}
+            errorDetectionCorrect={errorDetectionCorrect}
+            errorDetectionTotal={errorDetectionTotal}
             onRestart={handleRestart}
           />
         ) : currentCard.type === 'flashcard' ? (
@@ -1000,11 +1173,17 @@ export function Learn() {
             card={currentCard}
             onAnswer={handleFillInAnswer}
           />
-        ) : (
+        ) : currentCard.type === 'true_false' ? (
           <TrueFalseCard
             key={currentCard.id}
             card={currentCard}
             onAnswer={handleTrueFalseAnswer}
+          />
+        ) : (
+          <ErrorDetectionCard
+            key={currentCard.id}
+            card={currentCard}
+            onAnswer={handleErrorDetectionAnswer}
           />
         )}
       </div>

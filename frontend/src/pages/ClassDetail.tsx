@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { useState, useCallback } from 'react';
 import {
+  AlertCircle,
   ArrowLeft,
   BookOpen,
   CheckCircle2,
@@ -21,6 +22,7 @@ import {
   getActionItems,
   getFillInBlank,
   getTrueFalse,
+  getErrorDetection,
   dismissActionItem,
   startGeneration,
   type Urgency,
@@ -29,6 +31,7 @@ import {
   type Flashcard,
   type FillInBlankItem,
   type TrueFalseItem,
+  type ErrorDetectionItem,
 } from '@/api/learning';
 import { getVideoById } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
@@ -39,7 +42,7 @@ import { Card, CardContent } from '@/components/ui/card';
 // Helpers
 // ------------------------------------------------------------------
 
-const GENERATION_STEPS = ['summary', 'qa', 'flashcards', 'action_items', 'fill_in_blank', 'true_false'] as const;
+const GENERATION_STEPS = ['summary', 'qa', 'flashcards', 'action_items', 'fill_in_blank', 'true_false', 'error_detection'] as const;
 type GenStep = (typeof GENERATION_STEPS)[number];
 
 const STEP_LABELS: Record<GenStep, string> = {
@@ -49,6 +52,7 @@ const STEP_LABELS: Record<GenStep, string> = {
   action_items: 'Tareas',
   fill_in_blank: 'Completar',
   true_false: 'Verdadero/Falso',
+  error_detection: 'Errores',
 };
 
 function urgencyBadge(urgency: Urgency) {
@@ -490,11 +494,89 @@ function TrueFalseSection({ videoId }: { videoId: number }) {
   );
 }
 
+function ErrorDetectionSection({ videoId }: { videoId: number }) {
+  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['error-detection', videoId],
+    queryFn: () => getErrorDetection(videoId),
+    retry: false,
+  });
+
+  if (isLoading) return <div className="flex justify-center py-4"><Loader2 className="size-4 animate-spin text-muted-foreground" /></div>;
+  if (error || !data?.items.length)
+    return <p className="text-sm text-muted-foreground italic">Sin ejercicios de detección de errores todavía.</p>;
+
+  const toggle = (i: number) => {
+    setRevealed((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  const highlightError = (statement: string, errorText: string) => {
+    const idx = statement.indexOf(errorText);
+    if (idx === -1) return <span>{statement}</span>;
+    return (
+      <>
+        {statement.slice(0, idx)}
+        <span className="underline decoration-red-400 decoration-wavy">{errorText}</span>
+        {statement.slice(idx + errorText.length)}
+      </>
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      {data.items.map((item: ErrorDetectionItem, i: number) => (
+        <Card key={i} className="py-0">
+          <CardContent className="px-4 py-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium leading-relaxed">
+                  {highlightError(item.statement, item.error)}
+                </p>
+                {revealed.has(i) && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-sm text-red-700">
+                      Error: <span className="font-semibold line-through">{item.error}</span>
+                    </p>
+                    <p className="text-sm text-green-700 font-semibold">
+                      Corrección: {item.correction}
+                    </p>
+                    {item.explanation && (
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {item.explanation}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              {item.starred && (
+                <span className="text-sm shrink-0" title="Importante para el examen">⭐</span>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toggle(i)}
+              className="text-xs"
+            >
+              {revealed.has(i) ? 'Ocultar corrección' : 'Ver corrección'}
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------
 // Main page
 // ------------------------------------------------------------------
 
-type Tab = 'resumen' | 'qa' | 'flashcards' | 'tareas' | 'completar' | 'verdadero-falso';
+type Tab = 'resumen' | 'qa' | 'flashcards' | 'tareas' | 'completar' | 'verdadero-falso' | 'errores';
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: 'resumen', label: 'Resumen', icon: BookOpen },
@@ -503,6 +585,7 @@ const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: 'tareas', label: 'Tareas', icon: CheckCircle2 },
   { id: 'completar', label: 'Completar', icon: PenLine },
   { id: 'verdadero-falso', label: 'Verdadero/Falso', icon: ToggleLeft },
+  { id: 'errores', label: 'Errores', icon: AlertCircle },
 ];
 
 export function ClassDetail() {
@@ -524,6 +607,7 @@ export function ClassDetail() {
     queryClient.invalidateQueries({ queryKey: ['action-items', id] });
     queryClient.invalidateQueries({ queryKey: ['fill-in-blank', id] });
     queryClient.invalidateQueries({ queryKey: ['true-false', id] });
+    queryClient.invalidateQueries({ queryKey: ['error-detection', id] });
   }, [queryClient, id]);
 
   if (videoLoading) {
@@ -596,6 +680,7 @@ export function ClassDetail() {
           {activeTab === 'tareas' && <ActionItemsSection videoId={id} />}
           {activeTab === 'completar' && <FillInBlankSection videoId={id} />}
           {activeTab === 'verdadero-falso' && <TrueFalseSection videoId={id} />}
+          {activeTab === 'errores' && <ErrorDetectionSection videoId={id} />}
         </div>
       </div>
     </div>

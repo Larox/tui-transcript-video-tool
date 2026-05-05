@@ -11,6 +11,8 @@ from fastapi.responses import StreamingResponse
 from tui_transcript.api.schemas import (
     ActionItem,
     ActionItemsResponse,
+    ErrorDetectionItem,
+    ErrorDetectionResponse,
     Flashcard,
     FillInBlankItem,
     FillInBlankResponse,
@@ -41,7 +43,7 @@ def _sse_data(data: dict) -> str:
 
 
 async def _generation_stream(video_id: int, transcript: str) -> AsyncGenerator[str, None]:
-    """Run all 5 generators sequentially, saving each result and streaming progress."""
+    """Run all 7 generators sequentially, saving each result and streaming progress."""
     store = StudyStore()
     try:
         # --- summary ---
@@ -73,6 +75,11 @@ async def _generation_stream(video_id: int, transcript: str) -> AsyncGenerator[s
         true_false = await content_generator.generate_true_false(transcript)
         store.save_true_false(video_id, true_false)
         yield _sse_data({"type": "progress", "step": "true_false", "status": "done"})
+
+        # --- error detection ---
+        error_detection = await content_generator.generate_error_detection(transcript)
+        store.save_error_detection(video_id, error_detection)
+        yield _sse_data({"type": "progress", "step": "error_detection", "status": "done"})
 
         yield _sse_data({"type": "complete"})
     finally:
@@ -206,6 +213,29 @@ def get_true_false(video_id: int) -> TrueFalseResponse:
                     id=item["id"],
                     statement=item["statement"],
                     is_true=item["is_true"],
+                    explanation=item["explanation"],
+                    starred=item["starred"],
+                )
+                for item in items
+            ]
+        )
+    finally:
+        store.close()
+
+
+@router.get("/{video_id}/error-detection", response_model=ErrorDetectionResponse)
+def get_error_detection(video_id: int) -> ErrorDetectionResponse:
+    """Return error-detection items for a video."""
+    store = _store()
+    try:
+        items = store.get_error_detection(video_id)
+        return ErrorDetectionResponse(
+            items=[
+                ErrorDetectionItem(
+                    id=item["id"],
+                    statement=item["statement"],
+                    error=item["error"],
+                    correction=item["correction"],
                     explanation=item["explanation"],
                     starred=item["starred"],
                 )

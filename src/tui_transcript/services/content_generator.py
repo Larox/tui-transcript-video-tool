@@ -1,12 +1,13 @@
 """Study materials generation using Claude AI (claude-haiku-4-5-20251001).
 
-Generates 6 types of study materials from a class/lecture transcript:
+Generates 7 types of study materials from a class/lecture transcript:
   - Executive summary
   - Q&A pairs
   - Flashcards (concept/definition)
   - Action items (deadlines, homework, urgent notices)
   - Fill-in-the-blank items
   - True/False statements
+  - Error Detection items
 """
 from __future__ import annotations
 
@@ -78,6 +79,19 @@ _TRUE_FALSE_SYSTEM = (
     "Return ONLY a JSON array (no markdown) where each element has: "
     "'statement' (string), 'is_true' (bool), "
     "'explanation' (string, one sentence explaining why it's true or false), "
+    "'starred' (bool, true if the professor signaled this topic was especially important)."
+)
+
+_ERROR_DETECTION_SYSTEM = (
+    "You are an expert academic assistant. Given a class or lecture transcript, "
+    "create exactly 10 error-detection items. Each item is a statement that contains "
+    "exactly ONE deliberate factual error — a wrong term, incorrect number, swapped concept, "
+    "or false relationship taken from the lecture content. "
+    "Return ONLY a JSON array (no markdown) where each element has: "
+    "'statement' (string, the statement WITH the error), "
+    "'error' (string, the exact wrong word or phrase in the statement), "
+    "'correction' (string, what it should be), "
+    "'explanation' (string, one sentence explaining the correct version), "
     "'starred' (bool, true if the professor signaled this topic was especially important)."
 )
 
@@ -319,21 +333,65 @@ async def generate_true_false(transcript: str) -> list[dict]:
         return []
 
 
+async def generate_error_detection(transcript: str) -> list[dict]:
+    """Generate 10 error-detection items from a transcript.
+
+    Each dict has keys: ``statement``, ``error``, ``correction``, ``explanation``, ``starred``.
+    Returns an empty list on any failure — never crashes the pipeline.
+    """
+    if not transcript or not transcript.strip():
+        return []
+
+    try:
+        import os
+        import anthropic
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not set; skipping error detection generation")
+            return []
+
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        msg = await client.messages.create(
+            model=_MODEL,
+            max_tokens=2048,
+            system=_ERROR_DETECTION_SYSTEM,
+            messages=[{"role": "user", "content": transcript}],
+        )
+        raw = msg.content[0].text.strip()
+        data = json.loads(raw)
+        return [
+            {
+                "statement": item["statement"],
+                "error": item["error"],
+                "correction": item["correction"],
+                "explanation": item.get("explanation", ""),
+                "starred": bool(item.get("starred", False)),
+            }
+            for item in data
+            if isinstance(item, dict) and "statement" in item and "error" in item and "correction" in item
+        ]
+    except Exception as exc:
+        logger.warning("Error detection generation failed: %s", exc)
+        return []
+
+
 async def generate_all(transcript: str) -> dict:
-    """Run all 6 generators and return a combined result dict.
+    """Run all 7 generators and return a combined result dict.
 
     Keys: ``summary``, ``qa_pairs``, ``flashcards``, ``action_items``, ``fill_in_blank``,
-    ``true_false``.
+    ``true_false``, ``error_detection``.
     Each sub-result follows the same empty-on-failure contract as the
     individual functions.
     """
-    summary, qa_pairs, flashcards, action_items, fill_in_blank, true_false = (
+    summary, qa_pairs, flashcards, action_items, fill_in_blank, true_false, error_detection = (
         await generate_summary(transcript),
         await generate_qa_pairs(transcript),
         await generate_flashcards(transcript),
         await generate_action_items(transcript),
         await generate_fill_in_blank(transcript),
         await generate_true_false(transcript),
+        await generate_error_detection(transcript),
     )
     return {
         "summary": summary,
@@ -342,4 +400,5 @@ async def generate_all(transcript: str) -> dict:
         "action_items": action_items,
         "fill_in_blank": fill_in_blank,
         "true_false": true_false,
+        "error_detection": error_detection,
     }

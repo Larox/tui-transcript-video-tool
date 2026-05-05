@@ -262,6 +262,64 @@ class StudyStore:
         ]
 
     # ------------------------------------------------------------------
+    # Error Detection items
+    # ------------------------------------------------------------------
+
+    def save_error_detection(
+        self,
+        video_id: int,
+        items: list[dict],
+        user_id: str | None = None,
+    ) -> None:
+        """Replace all error-detection items for *video_id* with *items*.
+
+        Each dict in *items* must have ``statement``, ``error``, and ``correction`` keys.
+        The optional ``explanation`` key (str) explains the correct version.
+        The optional ``starred`` key (bool) flags teacher-emphasized items.
+        """
+        self._db._conn.execute(
+            "DELETE FROM error_detection_items WHERE video_id = ?", (video_id,)
+        )
+        for sort_order, item in enumerate(items):
+            starred = int(bool(item.get("starred", False)))
+            self._db._conn.execute(
+                "INSERT INTO error_detection_items "
+                "(video_id, statement, error, correction, explanation, sort_order, starred, user_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    video_id,
+                    item["statement"],
+                    item["error"],
+                    item["correction"],
+                    item.get("explanation", ""),
+                    sort_order,
+                    starred,
+                    user_id,
+                ),
+            )
+        self._db._conn.commit()
+
+    def get_error_detection(self, video_id: int) -> list[dict]:
+        """Return all error-detection items for *video_id* ordered by sort_order."""
+        rows = self._db._conn.execute(
+            "SELECT id, statement, error, correction, explanation, sort_order, starred "
+            "FROM error_detection_items WHERE video_id = ? ORDER BY sort_order",
+            (video_id,),
+        ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "statement": r[1],
+                "error": r[2],
+                "correction": r[3],
+                "explanation": r[4],
+                "sort_order": r[5],
+                "starred": bool(r[6]),
+            }
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
     # Action items
     # ------------------------------------------------------------------
 
