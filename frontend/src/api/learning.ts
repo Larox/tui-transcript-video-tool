@@ -168,6 +168,27 @@ export async function getFillInBlank(videoId: number): Promise<FillInBlankRespon
   return res.json();
 }
 
+export interface TrueFalseItem {
+  id: number;
+  statement: string;
+  is_true: boolean;
+  explanation: string;
+  starred: boolean;
+}
+
+export interface TrueFalseResponse {
+  items: TrueFalseItem[];
+}
+
+export async function getTrueFalse(videoId: number): Promise<TrueFalseResponse> {
+  const res = await fetch(`${API_BASE}/classes/${videoId}/true-false`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'No true/false items found');
+  }
+  return res.json();
+}
+
 export async function dismissActionItem(videoId: number, itemId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/classes/${videoId}/action-items/${itemId}/dismiss`, {
     method: 'PATCH',
@@ -226,7 +247,7 @@ export async function getStatsSummary(): Promise<StatsSummary> {
 // Generation SSE
 // ------------------------------------------------------------------
 
-export type GenerationStep = 'summary' | 'qa' | 'flashcards' | 'action_items' | 'fill_in_blank';
+export type GenerationStep = 'summary' | 'qa' | 'flashcards' | 'action_items' | 'fill_in_blank' | 'true_false';
 
 export type GenerationEvent =
   | { type: 'progress'; step: GenerationStep; status: 'done' }

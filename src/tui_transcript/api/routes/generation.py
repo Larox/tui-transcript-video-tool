@@ -18,6 +18,8 @@ from tui_transcript.api.schemas import (
     QAPair,
     QAResponse,
     SummaryResponse,
+    TrueFalseItem,
+    TrueFalseResponse,
 )
 from tui_transcript.services import content_generator
 from tui_transcript.services.history import HistoryDB
@@ -66,6 +68,11 @@ async def _generation_stream(video_id: int, transcript: str) -> AsyncGenerator[s
         fill_in_blank = await content_generator.generate_fill_in_blank(transcript)
         store.save_fill_in_blank(video_id, fill_in_blank)
         yield _sse_data({"type": "progress", "step": "fill_in_blank", "status": "done"})
+
+        # --- true/false ---
+        true_false = await content_generator.generate_true_false(transcript)
+        store.save_true_false(video_id, true_false)
+        yield _sse_data({"type": "progress", "step": "true_false", "status": "done"})
 
         yield _sse_data({"type": "complete"})
     finally:
@@ -178,6 +185,28 @@ def get_fill_in_blank(video_id: int) -> FillInBlankResponse:
                     sentence=item["sentence"],
                     answer=item["answer"],
                     hint=item["hint"],
+                    starred=item["starred"],
+                )
+                for item in items
+            ]
+        )
+    finally:
+        store.close()
+
+
+@router.get("/{video_id}/true-false", response_model=TrueFalseResponse)
+def get_true_false(video_id: int) -> TrueFalseResponse:
+    """Return true/false statements for a video."""
+    store = _store()
+    try:
+        items = store.get_true_false(video_id)
+        return TrueFalseResponse(
+            items=[
+                TrueFalseItem(
+                    id=item["id"],
+                    statement=item["statement"],
+                    is_true=item["is_true"],
+                    explanation=item["explanation"],
                     starred=item["starred"],
                 )
                 for item in items

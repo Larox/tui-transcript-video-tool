@@ -1,11 +1,12 @@
 """Study materials generation using Claude AI (claude-haiku-4-5-20251001).
 
-Generates 5 types of study materials from a class/lecture transcript:
+Generates 6 types of study materials from a class/lecture transcript:
   - Executive summary
   - Q&A pairs
   - Flashcards (concept/definition)
   - Action items (deadlines, homework, urgent notices)
   - Fill-in-the-blank items
+  - True/False statements
 """
 from __future__ import annotations
 
@@ -67,6 +68,17 @@ _FILL_IN_BLANK_SYSTEM = (
     "'pay close attention', 'watch out for this', 'remember this', 'key concept', "
     "'this is critical', or similar emphasis signals). "
     "Blanks should target key concepts and terminology from the lecture."
+)
+
+_TRUE_FALSE_SYSTEM = (
+    "You are an expert academic assistant. Given a class or lecture transcript, "
+    "create exactly 15 true-or-false statements about the key content. "
+    "Make roughly half true and half false. False statements should be subtly wrong — "
+    "a changed number, a swapped concept, a wrong relationship — not obviously absurd. "
+    "Return ONLY a JSON array (no markdown) where each element has: "
+    "'statement' (string), 'is_true' (bool), "
+    "'explanation' (string, one sentence explaining why it's true or false), "
+    "'starred' (bool, true if the professor signaled this topic was especially important)."
 )
 
 
@@ -265,19 +277,63 @@ async def generate_fill_in_blank(transcript: str) -> list[dict]:
         return []
 
 
-async def generate_all(transcript: str) -> dict:
-    """Run all 5 generators and return a combined result dict.
+async def generate_true_false(transcript: str) -> list[dict]:
+    """Generate 15 true/false statements from a transcript.
 
-    Keys: ``summary``, ``qa_pairs``, ``flashcards``, ``action_items``, ``fill_in_blank``.
+    Each dict has keys: ``statement``, ``is_true``, ``explanation``, ``starred``.
+    Returns an empty list on any failure — never crashes the pipeline.
+    """
+    if not transcript or not transcript.strip():
+        return []
+
+    try:
+        import os
+        import anthropic
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not set; skipping true/false generation")
+            return []
+
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        msg = await client.messages.create(
+            model=_MODEL,
+            max_tokens=2048,
+            system=_TRUE_FALSE_SYSTEM,
+            messages=[{"role": "user", "content": transcript}],
+        )
+        raw = msg.content[0].text.strip()
+        data = json.loads(raw)
+        return [
+            {
+                "statement": item["statement"],
+                "is_true": bool(item["is_true"]),
+                "explanation": item.get("explanation", ""),
+                "starred": bool(item.get("starred", False)),
+            }
+            for item in data
+            if isinstance(item, dict) and "statement" in item and "is_true" in item
+        ]
+    except Exception as exc:
+        logger.warning("True/false generation failed: %s", exc)
+        return []
+
+
+async def generate_all(transcript: str) -> dict:
+    """Run all 6 generators and return a combined result dict.
+
+    Keys: ``summary``, ``qa_pairs``, ``flashcards``, ``action_items``, ``fill_in_blank``,
+    ``true_false``.
     Each sub-result follows the same empty-on-failure contract as the
     individual functions.
     """
-    summary, qa_pairs, flashcards, action_items, fill_in_blank = (
+    summary, qa_pairs, flashcards, action_items, fill_in_blank, true_false = (
         await generate_summary(transcript),
         await generate_qa_pairs(transcript),
         await generate_flashcards(transcript),
         await generate_action_items(transcript),
         await generate_fill_in_blank(transcript),
+        await generate_true_false(transcript),
     )
     return {
         "summary": summary,
@@ -285,4 +341,5 @@ async def generate_all(transcript: str) -> dict:
         "flashcards": flashcards,
         "action_items": action_items,
         "fill_in_blank": fill_in_blank,
+        "true_false": true_false,
     }

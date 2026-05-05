@@ -118,6 +118,17 @@ CREATE TABLE IF NOT EXISTS fill_in_blank (
     user_id    TEXT
 );
 
+CREATE TABLE IF NOT EXISTS true_false_statements (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id    INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    statement   TEXT    NOT NULL,
+    is_true     INTEGER NOT NULL DEFAULT 1,
+    explanation TEXT    NOT NULL DEFAULT '',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    starred     INTEGER NOT NULL DEFAULT 0,
+    user_id     TEXT
+);
+
 CREATE TABLE IF NOT EXISTS study_sessions (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     session_date     TEXT    NOT NULL,
@@ -210,6 +221,19 @@ class HistoryDB:
             "    user_id    TEXT"
             ");"
         )
+        # Add true_false_statements table if missing (idempotent)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS true_false_statements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                video_id INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+                statement TEXT NOT NULL,
+                is_true INTEGER NOT NULL DEFAULT 1,
+                explanation TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                starred INTEGER NOT NULL DEFAULT 0,
+                user_id TEXT
+            )
+        """)
         # Seed activity_log from legacy study_sessions rows (treat each as activity_type='session')
         if "study_sessions" in existing_tables and "activity_log" in {
             row[0]

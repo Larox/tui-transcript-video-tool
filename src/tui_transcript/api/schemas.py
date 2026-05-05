@@ -378,6 +378,22 @@ class FillInBlankResponse(BaseModel):
     items: list[FillInBlankItem]
 
 
+class TrueFalseItem(BaseModel):
+    """A single true-or-false statement."""
+
+    id: int
+    statement: str
+    is_true: bool
+    explanation: str = ''
+    starred: bool = False
+
+
+class TrueFalseResponse(BaseModel):
+    """Response for GET /classes/{video_id}/true-false."""
+
+    items: list[TrueFalseItem]
+
+
 # ------------------------------------------------------------------
 # Dashboard
 # ------------------------------------------------------------------
