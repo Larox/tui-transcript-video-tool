@@ -179,39 +179,37 @@ export async function dismissActionItem(videoId: number, itemId: number): Promis
 }
 
 // ------------------------------------------------------------------
-// Stats / streaks (SEB-81, SEB-90)
+// Stats / streaks (SEB-81, SEB-90, refactor/activity-log)
 // ------------------------------------------------------------------
 
 export interface DailySessionEntry {
   date: string;
-  cards_reviewed: number;
-  quizzes_correct: number;
-  quizzes_total: number;
+  items_done: number;
+  items_correct: number;
 }
 
 export interface StatsSummary {
   current_streak: number;
   longest_streak: number;
   total_sessions: number;
-  total_cards_reviewed: number;
-  total_quizzes_correct: number;
-  total_quizzes_total: number;
+  total_items_done: number;
+  total_items_correct: number;
   sessions_last_30_days: DailySessionEntry[];
   daily_goal: number;
-  today_cards: number;
+  today_items: number;
 }
 
-export async function logStudySession(
-  cards: number,
-  correct: number,
-  total: number
+export async function logActivity(
+  activityType: string,
+  itemsDone: number,
+  itemsCorrect: number
 ): Promise<void> {
   // Fire-and-forget; ignore errors so a failed stat call never blocks the user
   try {
-    await fetch(`${API_BASE}/stats/session`, {
+    await fetch(`${API_BASE}/stats/activity`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cards_reviewed: cards, quizzes_correct: correct, quizzes_total: total }),
+      body: JSON.stringify({ activity_type: activityType, items_done: itemsDone, items_correct: itemsCorrect }),
     });
   } catch {
     // best-effort

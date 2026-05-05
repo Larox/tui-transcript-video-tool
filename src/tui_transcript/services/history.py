@@ -130,6 +130,19 @@ CREATE TABLE IF NOT EXISTS study_sessions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS study_sessions_date_user
     ON study_sessions (session_date, COALESCE(user_id, ''));
+
+CREATE TABLE IF NOT EXISTS activity_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_date      TEXT    NOT NULL,
+    activity_type TEXT    NOT NULL,
+    items_done    INTEGER NOT NULL DEFAULT 0,
+    items_correct INTEGER NOT NULL DEFAULT 0,
+    user_id       TEXT,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS activity_log_date_type_user
+    ON activity_log (log_date, activity_type, COALESCE(user_id, ''));
 """
 
 _FTS_SCHEMA = """\
@@ -197,6 +210,31 @@ class HistoryDB:
             "    user_id    TEXT"
             ");"
         )
+        # Seed activity_log from legacy study_sessions rows (treat each as activity_type='session')
+        if "study_sessions" in existing_tables and "activity_log" in {
+            row[0]
+            for row in self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }:
+            seeded = self._conn.execute(
+                "SELECT COUNT(*) FROM activity_log WHERE activity_type = 'session'"
+            ).fetchone()[0]
+            if seeded == 0:
+                self._conn.execute(
+                    """
+                    INSERT OR IGNORE INTO activity_log
+                        (log_date, activity_type, items_done, items_correct, user_id, created_at)
+                    SELECT
+                        session_date,
+                        'session',
+                        cards_reviewed,
+                        quizzes_correct,
+                        user_id,
+                        created_at
+                    FROM study_sessions
+                    """
+                )
         self._conn.commit()
 
     # ------------------------------------------------------------------

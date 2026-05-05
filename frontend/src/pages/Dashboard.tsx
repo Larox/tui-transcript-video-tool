@@ -93,9 +93,9 @@ function StreakWidget() {
 
   if (!data) return null;
 
-  const { current_streak, today_cards, daily_goal } = data;
-  const progress = Math.min(today_cards / daily_goal, 1);
-  const goalMet = today_cards >= daily_goal;
+  const { current_streak, today_items, daily_goal } = data;
+  const progress = Math.min(today_items / daily_goal, 1);
+  const goalMet = today_items >= daily_goal;
 
   return (
     <Card className="py-3">
@@ -121,8 +121,8 @@ function StreakWidget() {
             <p className="text-xs text-muted-foreground">
               {goalMet
                 ? '¡Meta completada!'
-                : `Te faltan ${daily_goal - today_cards} tarjetas hoy`}
-              {' '}·{' '}{today_cards}/{daily_goal}
+                : `Te faltan ${daily_goal - today_items} tarjetas hoy`}
+              {' '}·{' '}{today_items}/{daily_goal}
             </p>
           </div>
         </div>
