@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BarChart2, Bell, BookOpen, Brain, GraduationCap, Settings, Upload } from 'lucide-react';
+import { BarChart2, Bell, BookOpen, Brain, GraduationCap, Settings, Upload, Zap } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +24,7 @@ import { Collections } from '@/pages/Collections';
 import { Documents } from '@/pages/Documents';
 import { Config } from '@/pages/Config';
 import { Learn } from '@/pages/Learn';
+import { Speed } from '@/pages/Speed';
 import { Stats } from '@/pages/Stats';
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { to: '/', end: true, icon: Bell, label: 'Dashboard' },
   { to: '/courses', end: false, icon: GraduationCap, label: 'Mis Materias' },
   { to: '/learn', end: false, icon: Brain, label: 'Aprender' },
+  { to: '/speed', end: false, icon: Zap, label: 'Speed Round' },
   { to: '/stats', end: false, icon: BarChart2, label: 'Estadísticas' },
   { to: '/upload', end: false, icon: Upload, label: 'Subir Clase' },
   { to: '/config', end: false, icon: Settings, label: 'Configuración' },
@@ -92,7 +94,8 @@ function AppContent() {
     location.pathname.startsWith('/courses') ||
     location.pathname.startsWith('/classes') ||
     location.pathname.startsWith('/upload') ||
-    location.pathname.startsWith('/stats');
+    location.pathname.startsWith('/stats') ||
+    location.pathname.startsWith('/speed');
 
   return (
     <SidebarProvider>
@@ -111,6 +114,7 @@ function AppContent() {
             <Route path="/classes/:videoId" element={<ClassDetail />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/learn" element={<Learn />} />
+            <Route path="/speed" element={<Speed />} />
             <Route path="/stats" element={<Stats />} />
             {/* Legacy routes — keep working */}
             <Route path="/collections" element={<Collections />} />
