@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Bell, BookOpen, Brain, GraduationCap, Upload } from 'lucide-react';
+import { Bell, BookOpen, Brain, GraduationCap, Settings, Upload } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -32,6 +32,7 @@ const NAV_ITEMS = [
   { to: '/courses', end: false, icon: GraduationCap, label: 'Mis Materias' },
   { to: '/learn', end: false, icon: Brain, label: 'Aprender' },
   { to: '/upload', end: false, icon: Upload, label: 'Subir Clase' },
+  { to: '/config', end: false, icon: Settings, label: 'Configuración' },
 ];
 
 function AppSidebar() {
