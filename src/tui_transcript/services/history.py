@@ -67,6 +67,43 @@ CREATE TABLE IF NOT EXISTS video_tags (
     tag_id   INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (video_id, tag_id)
 );
+
+CREATE TABLE IF NOT EXISTS summaries (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id     INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    text         TEXT    NOT NULL,
+    generated_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    user_id      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS qa_pairs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id   INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    question   TEXT    NOT NULL,
+    answer     TEXT    NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    user_id    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS flashcards (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id   INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    concept    TEXT    NOT NULL,
+    definition TEXT    NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    user_id    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS action_items (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id       INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    text           TEXT    NOT NULL,
+    urgency        TEXT    NOT NULL CHECK (urgency IN ('high', 'medium', 'low')),
+    extracted_date TEXT,
+    dismissed      INTEGER NOT NULL DEFAULT 0,
+    user_id        TEXT,
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 _FTS_SCHEMA = """\
