@@ -26,14 +26,22 @@ _QA_SYSTEM = (
     "You are an expert academic assistant. Given a class or lecture transcript, "
     "create exactly 10 question-answer pairs that cover the most important concepts. "
     "Return ONLY a JSON array (no markdown, no extra text) where each element "
-    'has exactly two string fields: "question" and "answer".'
+    'has exactly three fields: "question" (string), "answer" (string), and "starred" (boolean). '
+    "Set starred=true when the professor explicitly signals the topic is especially important — "
+    "for example with phrases like 'this will be on the exam', 'very important', "
+    "'pay close attention', 'watch out for this', 'remember this', 'key concept', "
+    "'this is critical', or similar emphasis signals. Otherwise set starred=false."
 )
 
 _FLASHCARD_SYSTEM = (
     "You are an expert academic assistant. Given a class or lecture transcript, "
     "create exactly 20 flashcard pairs for the key concepts introduced. "
     "Return ONLY a JSON array (no markdown, no extra text) where each element "
-    'has exactly two string fields: "concept" and "definition".'
+    'has exactly three fields: "concept" (string), "definition" (string), and "starred" (boolean). '
+    "Set starred=true when the professor explicitly signals the concept is especially important — "
+    "for example with phrases like 'this will be on the exam', 'very important', "
+    "'pay close attention', 'watch out for this', 'remember this', 'key concept', "
+    "'this is critical', or similar emphasis signals. Otherwise set starred=false."
 )
 
 _ACTION_ITEMS_SYSTEM = (
@@ -80,7 +88,7 @@ async def generate_summary(transcript: str) -> str:
 async def generate_qa_pairs(transcript: str) -> list[dict]:
     """Generate 10 Q&A pairs from a transcript.
 
-    Each dict has keys: ``question``, ``answer``.
+    Each dict has keys: ``question``, ``answer``, ``starred``.
     Returns an empty list on any failure — never crashes the pipeline.
     """
     if not transcript or not transcript.strip():
@@ -105,7 +113,11 @@ async def generate_qa_pairs(transcript: str) -> list[dict]:
         raw = msg.content[0].text.strip()
         data = json.loads(raw)
         return [
-            {"question": item["question"], "answer": item["answer"]}
+            {
+                "question": item["question"],
+                "answer": item["answer"],
+                "starred": bool(item.get("starred", False)),
+            }
             for item in data
             if isinstance(item, dict) and "question" in item and "answer" in item
         ]
@@ -117,7 +129,7 @@ async def generate_qa_pairs(transcript: str) -> list[dict]:
 async def generate_flashcards(transcript: str) -> list[dict]:
     """Generate 20 flashcard concept/definition pairs from a transcript.
 
-    Each dict has keys: ``concept``, ``definition``.
+    Each dict has keys: ``concept``, ``definition``, ``starred``.
     Returns an empty list on any failure — never crashes the pipeline.
     """
     if not transcript or not transcript.strip():
@@ -142,7 +154,11 @@ async def generate_flashcards(transcript: str) -> list[dict]:
         raw = msg.content[0].text.strip()
         data = json.loads(raw)
         return [
-            {"concept": item["concept"], "definition": item["definition"]}
+            {
+                "concept": item["concept"],
+                "definition": item["definition"],
+                "starred": bool(item.get("starred", False)),
+            }
             for item in data
             if isinstance(item, dict) and "concept" in item and "definition" in item
         ]

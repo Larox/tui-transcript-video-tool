@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS qa_pairs (
     question   TEXT    NOT NULL,
     answer     TEXT    NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
+    starred    INTEGER NOT NULL DEFAULT 0,
     user_id    TEXT
 );
 
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS flashcards (
     concept    TEXT    NOT NULL,
     definition TEXT    NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
+    starred    INTEGER NOT NULL DEFAULT 0,
     user_id    TEXT
 );
 
@@ -122,6 +124,43 @@ class HistoryDB:
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
         self._conn.executescript(_FTS_SCHEMA)
+        self._migrate()
+
+    # ------------------------------------------------------------------
+    # Migrations
+    # ------------------------------------------------------------------
+
+    def _migrate(self) -> None:
+        """Apply incremental schema migrations for existing databases."""
+        existing_tables = {
+            row[0]
+            for row in self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        # Add starred column to qa_pairs if missing
+        if "qa_pairs" in existing_tables:
+            cols = {
+                row[1]
+                for row in self._conn.execute("PRAGMA table_info(qa_pairs)").fetchall()
+            }
+            if "starred" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE qa_pairs ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"
+                )
+        # Add starred column to flashcards if missing
+        if "flashcards" in existing_tables:
+            cols = {
+                row[1]
+                for row in self._conn.execute(
+                    "PRAGMA table_info(flashcards)"
+                ).fetchall()
+            }
+            if "starred" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE flashcards ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"
+                )
+        self._conn.commit()
 
     # ------------------------------------------------------------------
     # Queries

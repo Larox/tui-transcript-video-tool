@@ -323,6 +323,7 @@ class QAPair(BaseModel):
 
     question: str
     answer: str
+    starred: bool = False
 
 
 class QAResponse(BaseModel):
@@ -336,6 +337,7 @@ class Flashcard(BaseModel):
 
     concept: str
     definition: str
+    starred: bool = False
 
 
 class FlashcardsResponse(BaseModel):

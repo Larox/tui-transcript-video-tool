@@ -104,6 +104,23 @@ class TestQAPairs:
         result = store.get_qa_pairs(vid)
         assert result[0]["user_id"] is None
 
+    def test_starred_defaults_to_false(self, store: StudyStore, db: HistoryDB) -> None:
+        vid = _insert_video(db, 1)
+        store.save_qa_pairs(vid, [{"question": "Q", "answer": "A"}])
+        result = store.get_qa_pairs(vid)
+        assert result[0]["starred"] is False
+
+    def test_starred_true_is_persisted(self, store: StudyStore, db: HistoryDB) -> None:
+        vid = _insert_video(db, 1)
+        pairs = [
+            {"question": "Exam Q", "answer": "Exam A", "starred": True},
+            {"question": "Normal Q", "answer": "Normal A", "starred": False},
+        ]
+        store.save_qa_pairs(vid, pairs)
+        result = store.get_qa_pairs(vid)
+        assert result[0]["starred"] is True
+        assert result[1]["starred"] is False
+
 
 # ---------------------------------------------------------------------------
 # Flashcards
@@ -146,6 +163,23 @@ class TestFlashcards:
         store.save_flashcards(vid, [{"concept": "C", "definition": "D"}])
         result = store.get_flashcards(vid)
         assert result[0]["user_id"] is None
+
+    def test_starred_defaults_to_false(self, store: StudyStore, db: HistoryDB) -> None:
+        vid = _insert_video(db, 1)
+        store.save_flashcards(vid, [{"concept": "C", "definition": "D"}])
+        result = store.get_flashcards(vid)
+        assert result[0]["starred"] is False
+
+    def test_starred_true_is_persisted(self, store: StudyStore, db: HistoryDB) -> None:
+        vid = _insert_video(db, 1)
+        cards = [
+            {"concept": "Key Concept", "definition": "Very important.", "starred": True},
+            {"concept": "Other", "definition": "Less critical.", "starred": False},
+        ]
+        store.save_flashcards(vid, cards)
+        result = store.get_flashcards(vid)
+        assert result[0]["starred"] is True
+        assert result[1]["starred"] is False
 
 
 # ---------------------------------------------------------------------------
