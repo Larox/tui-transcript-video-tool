@@ -168,7 +168,7 @@ async def generate_summary(transcript: str) -> str:
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         client = _anthropic.AsyncAnthropic(api_key=api_key)
         msg = await client.messages.create(
-            model=os.environ.get("AI_MODEL", "claude-sonnet-4-6"),
+            model="claude-sonnet-4-6",
             max_tokens=1024,
             system=_SUMMARY_INSTRUCTIONS,
             messages=[{"role": "user", "content": transcript}],
