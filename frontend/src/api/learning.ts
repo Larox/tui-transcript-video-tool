@@ -252,6 +252,7 @@ export interface StatsSummary {
   sessions_last_30_days: DailySessionEntry[];
   daily_goal: number;
   today_items: number;
+  boss_battles_completed: number;
 }
 
 export async function logActivity(
@@ -466,4 +467,40 @@ export async function rateCard(
     throw new Error((err as { detail?: string }).detail || 'Failed to rate card');
   }
   return res.json();
+}
+
+// ------------------------------------------------------------------
+// Boss Battle (SEB-87)
+// ------------------------------------------------------------------
+
+export interface WeeklyFailingCard {
+  card_id: string;
+  card_type: string;
+  fail_count: number;
+  last_failed_at: string | null;
+}
+
+export interface BossBattleResponse {
+  video_id: number;
+  week_start: string;
+  cards: WeeklyFailingCard[];
+}
+
+export async function getBossBattle(videoId: number): Promise<BossBattleResponse> {
+  const res = await fetch(`${API_BASE}/classes/${videoId}/boss-battle`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'Failed to fetch boss battle');
+  }
+  return res.json();
+}
+
+export async function completeBossBattle(videoId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/classes/${videoId}/boss-battle/complete`, {
+    method: 'POST',
+  });
+  if (!res.ok && res.status !== 204) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'Failed to record completion');
+  }
 }

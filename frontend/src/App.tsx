@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BarChart2, Bell, BookOpen, Brain, GraduationCap, Settings, Upload, Zap } from 'lucide-react';
+import { BarChart2, Bell, BookOpen, Brain, GraduationCap, Settings, Skull, Upload, Zap } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +25,7 @@ import { Documents } from '@/pages/Documents';
 import { Config } from '@/pages/Config';
 import { Learn } from '@/pages/Learn';
 import { Speed } from '@/pages/Speed';
+import { BossBattle } from '@/pages/BossBattle';
 import { Stats } from '@/pages/Stats';
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { to: '/courses', end: false, icon: GraduationCap, label: 'Mis Materias' },
   { to: '/learn', end: false, icon: Brain, label: 'Aprender' },
   { to: '/speed', end: false, icon: Zap, label: 'Speed Round' },
+  { to: '/boss-battle', end: false, icon: Skull, label: 'Boss Battle' },
   { to: '/stats', end: false, icon: BarChart2, label: 'Estadísticas' },
   { to: '/upload', end: false, icon: Upload, label: 'Subir Clase' },
   { to: '/config', end: false, icon: Settings, label: 'Configuración' },
@@ -115,6 +117,7 @@ function AppContent() {
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/speed" element={<Speed />} />
+            <Route path="/boss-battle" element={<BossBattle />} />
             <Route path="/stats" element={<Stats />} />
             {/* Legacy routes — keep working */}
             <Route path="/collections" element={<Collections />} />

@@ -163,6 +163,7 @@ function buildAchievements(data: {
   longest_streak: number;
   total_items_done: number;
   total_items_correct: number;
+  boss_battles_completed: number;
 }): Achievement[] {
   const accuracy =
     data.total_items_done > 0
@@ -204,6 +205,13 @@ function buildAchievements(data: {
       icon: '🧠',
       unlocked: data.total_items_done >= 50 && accuracy >= 0.8,
       requirement: '50+ ítems con 80% de acierto',
+    },
+    {
+      id: 'boss-slayer',
+      label: 'Boss Slayer',
+      icon: '🏅',
+      unlocked: data.boss_battles_completed >= 1,
+      requirement: 'Vence un Boss Battle semanal',
     },
   ];
 }
