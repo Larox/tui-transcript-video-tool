@@ -147,6 +147,27 @@ export async function getActionItems(videoId: number): Promise<ActionItemsRespon
   return res.json();
 }
 
+export interface FillInBlankItem {
+  id: number;
+  sentence: string;
+  answer: string;
+  hint: string;
+  starred: boolean;
+}
+
+export interface FillInBlankResponse {
+  items: FillInBlankItem[];
+}
+
+export async function getFillInBlank(videoId: number): Promise<FillInBlankResponse> {
+  const res = await fetch(`${API_BASE}/classes/${videoId}/fill-in-blank`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'No fill-in-blank items found');
+  }
+  return res.json();
+}
+
 export async function dismissActionItem(videoId: number, itemId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/classes/${videoId}/action-items/${itemId}/dismiss`, {
     method: 'PATCH',
@@ -207,7 +228,7 @@ export async function getStatsSummary(): Promise<StatsSummary> {
 // Generation SSE
 // ------------------------------------------------------------------
 
-export type GenerationStep = 'summary' | 'qa' | 'flashcards' | 'action_items';
+export type GenerationStep = 'summary' | 'qa' | 'flashcards' | 'action_items' | 'fill_in_blank';
 
 export type GenerationEvent =
   | { type: 'progress'; step: GenerationStep; status: 'done' }

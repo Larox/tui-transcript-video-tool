@@ -236,6 +236,7 @@ async def test_generate_all_returns_combined_dict(monkeypatch):
         patch.object(content_generator, "generate_qa_pairs", new=AsyncMock(return_value=[{"question": "Q1", "answer": "A1"}])),
         patch.object(content_generator, "generate_flashcards", new=AsyncMock(return_value=[{"concept": "C1", "definition": "D1"}])),
         patch.object(content_generator, "generate_action_items", new=AsyncMock(return_value=[{"text": "Do X", "urgency": "high", "extracted_date": None}])),
+        patch.object(content_generator, "generate_fill_in_blank", new=AsyncMock(return_value=[{"sentence": "The ___ is key.", "answer": "concept", "hint": "", "starred": False}])),
     ):
         result = await content_generator.generate_all(SAMPLE_TRANSCRIPT)
 
@@ -243,13 +244,14 @@ async def test_generate_all_returns_combined_dict(monkeypatch):
     assert result["qa_pairs"] == [{"question": "Q1", "answer": "A1"}]
     assert result["flashcards"] == [{"concept": "C1", "definition": "D1"}]
     assert result["action_items"] == [{"text": "Do X", "urgency": "high", "extracted_date": None}]
-    assert set(result.keys()) == {"summary", "qa_pairs", "flashcards", "action_items"}
+    assert result["fill_in_blank"] == [{"sentence": "The ___ is key.", "answer": "concept", "hint": "", "starred": False}]
+    assert set(result.keys()) == {"summary", "qa_pairs", "flashcards", "action_items", "fill_in_blank"}
 
 
 @pytest.mark.asyncio
 async def test_generate_all_empty_transcript():
     result = await content_generator.generate_all("")
-    assert result == {"summary": "", "qa_pairs": [], "flashcards": [], "action_items": []}
+    assert result == {"summary": "", "qa_pairs": [], "flashcards": [], "action_items": [], "fill_in_blank": []}
 
 
 # ---------------------------------------------------------------------------

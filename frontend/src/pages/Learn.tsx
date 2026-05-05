@@ -10,7 +10,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Brain, ArrowLeft, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
 import { getCollections, getCollection, type CollectionEntry, type CollectionItemEntry } from '@/api/client';
-import { getFlashcards, getQA, logStudySession, type Flashcard, type QAPair } from '@/api/learning';
+import { getFlashcards, getQA, getFillInBlank, logStudySession, type Flashcard, type QAPair, type FillInBlankItem as ApiFillInBlankItem } from '@/api/learning';
 import { Button } from '@/components/ui/button';
 
 // ------------------------------------------------------------------
@@ -38,7 +38,18 @@ interface QuizItem {
   starred: boolean;
 }
 
-type DeckCard = FlashcardItem | QuizItem;
+interface FillInBlankItem {
+  type: 'fill_in_blank';
+  id: string;
+  sentence: string;
+  answer: string;
+  hint: string;
+  courseName: string;
+  className: string;
+  starred: boolean;
+}
+
+type DeckCard = FlashcardItem | QuizItem | FillInBlankItem;
 
 // ------------------------------------------------------------------
 // Data loading hook
@@ -62,6 +73,7 @@ function buildDeck(
   classMeta: ClassMeta,
   flashcards: Flashcard[],
   qaPairs: QAPair[],
+  fillInBlanks: ApiFillInBlankItem[],
   allAnswers: string[]
 ): DeckCard[] {
   const cards: DeckCard[] = [];
@@ -119,6 +131,21 @@ function buildDeck(
       courseName,
       className,
       starred: pair.starred ?? false,
+    });
+  }
+
+  // FillInBlankCards
+  for (let i = 0; i < fillInBlanks.length; i++) {
+    const fib = fillInBlanks[i];
+    cards.push({
+      type: 'fill_in_blank',
+      id: `fib-${item.id}-${i}`,
+      sentence: fib.sentence,
+      answer: fib.answer,
+      hint: fib.hint,
+      courseName,
+      className,
+      starred: fib.starred ?? false,
     });
   }
 
@@ -381,6 +408,118 @@ function QuizCard({
   );
 }
 
+function FillInBlankCard({
+  card,
+  onAnswer,
+}: {
+  card: FillInBlankItem;
+  onAnswer: (correct: boolean) => void;
+}) {
+  const [input, setInput] = useState('');
+  const [checked, setChecked] = useState(false);
+  const [correct, setCorrect] = useState(false);
+  const [exiting, setExiting] = useState<'left' | 'right' | null>(null);
+
+  const handleCheck = () => {
+    if (checked) return;
+    const isCorrect = input.trim().toLowerCase() === card.answer.trim().toLowerCase();
+    setCorrect(isCorrect);
+    setChecked(true);
+  };
+
+  const triggerAdvance = (isCorrect: boolean) => {
+    const dir = isCorrect ? 'right' : 'left';
+    setExiting(dir);
+    setTimeout(() => onAnswer(isCorrect), 300);
+  };
+
+  const handleNext = () => {
+    triggerAdvance(correct);
+  };
+
+  const translateX = exiting === 'left' ? -400 : exiting === 'right' ? 400 : 0;
+  const opacity = exiting ? 0 : 1;
+
+  // Parts of sentence split around ___
+  const parts = card.sentence.split('___');
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center px-4">
+      <div
+        className="w-full max-w-sm"
+        style={{
+          transform: `translateX(${translateX}px)`,
+          opacity,
+          transition: exiting ? 'transform 0.3s ease, opacity 0.3s ease' : 'none',
+        }}
+      >
+        <div className="bg-card border rounded-2xl shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-primary/10 px-5 py-3 flex items-center gap-2">
+            <Brain className="size-4 text-primary shrink-0" />
+            <span className="text-xs font-medium text-primary truncate">{card.courseName}</span>
+            <span className="text-xs text-muted-foreground truncate">· {card.className}</span>
+            {card.starred && (
+              <span className="ml-auto text-sm" title="Importante para el examen">⭐</span>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="px-6 pt-6 pb-4">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">Completar</p>
+            <p className="text-base leading-relaxed font-medium">
+              {parts[0]}
+              <span className="inline-block border-b-2 border-primary min-w-[80px] text-center text-primary font-semibold mx-1">
+                {checked ? card.answer : '        '}
+              </span>
+              {parts[1]}
+            </p>
+          </div>
+
+          {/* Input */}
+          {!checked && (
+            <div className="px-5 pb-4 space-y-3">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
+                placeholder="Escribe la respuesta..."
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                autoFocus
+              />
+              {card.hint && (
+                <p className="text-xs text-muted-foreground">Pista: {card.hint}</p>
+              )}
+              <Button onClick={handleCheck} className="w-full" disabled={!input.trim()}>
+                Verificar
+              </Button>
+            </div>
+          )}
+
+          {/* Feedback */}
+          {checked && (
+            <div className="px-5 pb-5 space-y-3">
+              <div className={`px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 ${
+                correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              }`}>
+                {correct ? (
+                  <><CheckCircle2 className="size-4 shrink-0" /> Correcto</>
+                ) : (
+                  <><XCircle className="size-4 shrink-0" /> Respuesta: {card.answer}</>
+                )}
+              </div>
+              <Button onClick={handleNext} className="w-full">
+                Siguiente
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------
 // Results screen
 // ------------------------------------------------------------------
@@ -390,15 +529,21 @@ function ResultsScreen({
   flashcardsReviewed,
   quizCorrect,
   quizTotal,
+  fillInCorrect,
+  fillInTotal,
   onRestart,
 }: {
   totalCards: number;
   flashcardsReviewed: number;
   quizCorrect: number;
   quizTotal: number;
+  fillInCorrect: number;
+  fillInTotal: number;
   onRestart: () => void;
 }) {
-  const percentage = quizTotal > 0 ? Math.round((quizCorrect / quizTotal) * 100) : null;
+  const combinedCorrect = quizCorrect + fillInCorrect;
+  const combinedTotal = quizTotal + fillInTotal;
+  const percentage = combinedTotal > 0 ? Math.round((combinedCorrect / combinedTotal) * 100) : null;
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
@@ -422,12 +567,20 @@ function ResultsScreen({
               <p className="text-xs text-muted-foreground mt-1">Quiz correctos</p>
             </div>
           )}
+          {fillInTotal > 0 && (
+            <div className="bg-card border rounded-xl p-4">
+              <p className="text-3xl font-bold text-primary">
+                {fillInCorrect}/{fillInTotal}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Completar correctos</p>
+            </div>
+          )}
           {percentage !== null && (
             <div className="bg-card border rounded-xl p-4 col-span-2">
               <p className="text-3xl font-bold" style={{ color: percentage >= 70 ? '#16a34a' : percentage >= 40 ? '#ea580c' : '#dc2626' }}>
                 {percentage}%
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Precisión en quiz</p>
+              <p className="text-xs text-muted-foreground mt-1">Precisión general</p>
             </div>
           )}
         </div>
@@ -487,6 +640,8 @@ export function Learn() {
   const [flashcardsReviewed, setFlashcardsReviewed] = useState(0);
   const [quizCorrect, setQuizCorrect] = useState(0);
   const [quizTotal, setQuizTotal] = useState(0);
+  const [fillInCorrect, setFillInCorrect] = useState(0);
+  const [fillInTotal, setFillInTotal] = useState(0);
   const [finished, setFinished] = useState(false);
   const [deckSeed, setDeckSeed] = useState(0); // used to re-shuffle
 
@@ -531,14 +686,16 @@ export function Learn() {
     queryFn: async () => {
       const results = await Promise.all(
         classMetas.map(async (cm) => {
-          const [fcRes, qaRes] = await Promise.allSettled([
+          const [fcRes, qaRes, fibRes] = await Promise.allSettled([
             getFlashcards(cm.item.id),
             getQA(cm.item.id),
+            getFillInBlank(cm.item.id),
           ]);
           return {
             meta: cm,
             flashcards: fcRes.status === 'fulfilled' ? fcRes.value.cards : [],
             qaPairs: qaRes.status === 'fulfilled' ? qaRes.value.pairs : [],
+            fillInBlanks: fibRes.status === 'fulfilled' ? fibRes.value.items : [],
           };
         })
       );
@@ -556,7 +713,7 @@ export function Learn() {
 
     const allCards: DeckCard[] = [];
     for (const result of contentQuery.data) {
-      const cards = buildDeck(result.meta, result.flashcards, result.qaPairs, allAnswers);
+      const cards = buildDeck(result.meta, result.flashcards, result.qaPairs, result.fillInBlanks, allAnswers);
       allCards.push(...cards);
     }
 
@@ -568,13 +725,19 @@ export function Learn() {
     setFlashcardsReviewed(0);
     setQuizCorrect(0);
     setQuizTotal(0);
+    setFillInCorrect(0);
+    setFillInTotal(0);
     setFinished(false);
   }, [contentQuery.data]);
 
   // Log the session when it finishes (fire-and-forget)
   useEffect(() => {
     if (!finished) return;
-    logStudySession(flashcardsReviewed, quizCorrect, quizTotal);
+    logStudySession(
+      flashcardsReviewed,
+      quizCorrect + fillInCorrect,
+      quizTotal + fillInTotal
+    );
   }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const advance = useCallback(() => {
@@ -600,6 +763,12 @@ export function Learn() {
   const handleQuizAnswer = useCallback((correct: boolean) => {
     setQuizTotal((n) => n + 1);
     if (correct) setQuizCorrect((n) => n + 1);
+    advance();
+  }, [advance]);
+
+  const handleFillInAnswer = useCallback((correct: boolean) => {
+    setFillInTotal((n) => n + 1);
+    if (correct) setFillInCorrect((n) => n + 1);
     advance();
   }, [advance]);
 
@@ -659,6 +828,8 @@ export function Learn() {
             flashcardsReviewed={flashcardsReviewed}
             quizCorrect={quizCorrect}
             quizTotal={quizTotal}
+            fillInCorrect={fillInCorrect}
+            fillInTotal={fillInTotal}
             onRestart={handleRestart}
           />
         ) : currentCard.type === 'flashcard' ? (
@@ -668,11 +839,17 @@ export function Learn() {
             onSwipeLeft={handleFlashcardSwipeLeft}
             onSwipeRight={handleFlashcardSwipeRight}
           />
-        ) : (
+        ) : currentCard.type === 'quiz' ? (
           <QuizCard
             key={currentCard.id}
             card={currentCard}
             onAnswer={handleQuizAnswer}
+          />
+        ) : (
+          <FillInBlankCard
+            key={currentCard.id}
+            card={currentCard}
+            onAnswer={handleFillInAnswer}
           />
         )}
       </div>

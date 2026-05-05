@@ -1,10 +1,11 @@
 """Study materials generation using Claude AI (claude-haiku-4-5-20251001).
 
-Generates 4 types of study materials from a class/lecture transcript:
+Generates 5 types of study materials from a class/lecture transcript:
   - Executive summary
   - Q&A pairs
   - Flashcards (concept/definition)
   - Action items (deadlines, homework, urgent notices)
+  - Fill-in-the-blank items
 """
 from __future__ import annotations
 
@@ -52,6 +53,20 @@ _ACTION_ITEMS_SYSTEM = (
     "Return ONLY a JSON array (no markdown, no extra text) where each element has exactly "
     'three fields: "text" (string), "urgency" (one of "high", "medium", "low"), '
     'and "extracted_date" (string or null).'
+)
+
+_FILL_IN_BLANK_SYSTEM = (
+    "You are an expert academic assistant. Given a class or lecture transcript, "
+    "create exactly 10 fill-in-the-blank items. "
+    "Return ONLY a JSON array (no markdown, no extra text) where each element has exactly "
+    'four fields: "sentence" (string with the key term replaced by ___), '
+    '"answer" (string, the missing term), '
+    '"hint" (short hint or empty string), '
+    '"starred" (boolean, true if the professor signaled this concept is especially important — '
+    "for example with phrases like 'this will be on the exam', 'very important', "
+    "'pay close attention', 'watch out for this', 'remember this', 'key concept', "
+    "'this is critical', or similar emphasis signals). "
+    "Blanks should target key concepts and terminology from the lecture."
 )
 
 
@@ -208,22 +223,66 @@ async def generate_action_items(transcript: str) -> list[dict]:
         return []
 
 
-async def generate_all(transcript: str) -> dict:
-    """Run all 4 generators and return a combined result dict.
+async def generate_fill_in_blank(transcript: str) -> list[dict]:
+    """Generate 10 fill-in-the-blank items from a transcript.
 
-    Keys: ``summary``, ``qa_pairs``, ``flashcards``, ``action_items``.
+    Each dict has keys: ``sentence``, ``answer``, ``hint``, ``starred``.
+    Returns an empty list on any failure — never crashes the pipeline.
+    """
+    if not transcript or not transcript.strip():
+        return []
+
+    try:
+        import os
+        import anthropic
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not set; skipping fill-in-blank generation")
+            return []
+
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        msg = await client.messages.create(
+            model=_MODEL,
+            max_tokens=2048,
+            system=_FILL_IN_BLANK_SYSTEM,
+            messages=[{"role": "user", "content": transcript}],
+        )
+        raw = msg.content[0].text.strip()
+        data = json.loads(raw)
+        return [
+            {
+                "sentence": item["sentence"],
+                "answer": item["answer"],
+                "hint": item.get("hint", ""),
+                "starred": bool(item.get("starred", False)),
+            }
+            for item in data
+            if isinstance(item, dict) and "sentence" in item and "answer" in item
+        ]
+    except Exception as exc:
+        logger.warning("Fill-in-blank generation failed: %s", exc)
+        return []
+
+
+async def generate_all(transcript: str) -> dict:
+    """Run all 5 generators and return a combined result dict.
+
+    Keys: ``summary``, ``qa_pairs``, ``flashcards``, ``action_items``, ``fill_in_blank``.
     Each sub-result follows the same empty-on-failure contract as the
     individual functions.
     """
-    summary, qa_pairs, flashcards, action_items = (
+    summary, qa_pairs, flashcards, action_items, fill_in_blank = (
         await generate_summary(transcript),
         await generate_qa_pairs(transcript),
         await generate_flashcards(transcript),
         await generate_action_items(transcript),
+        await generate_fill_in_blank(transcript),
     )
     return {
         "summary": summary,
         "qa_pairs": qa_pairs,
         "flashcards": flashcards,
         "action_items": action_items,
+        "fill_in_blank": fill_in_blank,
     }
