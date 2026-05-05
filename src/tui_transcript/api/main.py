@@ -55,6 +55,9 @@ def auto_register_legacy_output_dir() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     auto_register_legacy_output_dir()
+    # Boot the session store and purge any expired sessions from previous runs.
+    from tui_transcript.services.session_store import get_store
+    get_store()  # cleanup_expired() is called inside on first access
     yield
 
 

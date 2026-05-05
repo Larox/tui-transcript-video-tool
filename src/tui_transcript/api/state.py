@@ -1,20 +1,20 @@
-"""In-memory state for uploads and transcription sessions."""
+"""API state — thin shim over the SQLite-backed SessionStore.
+
+The public API is identical to the old in-memory implementation so that
+routes need no changes.  All state is now persisted in
+~/.tui_transcript/sessions.db via services/session_store.py.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import tempfile
-import uuid
 from pathlib import Path
 from typing import Any
 
-# Uploaded files: id -> {path, name, size_bytes}
-_uploads: dict[str, dict[str, Any]] = {}
+from tui_transcript.services.session_store import get_store
 
-# Sessions: session_id -> {queue, task, jobs, status}
-_sessions: dict[str, dict[str, Any]] = {}
-
-# Temp directory for uploads (cleaned on shutdown)
+# Temp directory for uploads (same as before; lifetime is the process)
 _upload_dir: Path | None = None
 
 
@@ -25,68 +25,49 @@ def _get_upload_dir() -> Path:
     return _upload_dir
 
 
+# ---------------------------------------------------------------------------
+# Upload helpers
+# ---------------------------------------------------------------------------
+
 def store_upload(file_path: Path, original_name: str) -> str:
     """Store an uploaded file. Returns unique ID."""
-    fid = str(uuid.uuid4())
-    _uploads[fid] = {
-        "path": file_path,
-        "name": original_name,
-        "size_bytes": file_path.stat().st_size,
-    }
-    return fid
+    return get_store().store_upload(file_path, original_name)
 
 
 def get_upload(file_id: str) -> dict[str, Any] | None:
     """Get upload by ID."""
-    return _uploads.get(file_id)
+    return get_store().get_upload(file_id)
 
 
 def remove_upload(file_id: str) -> None:
     """Remove upload and delete temp file."""
-    entry = _uploads.pop(file_id, None)
-    if entry and entry["path"].exists():
-        try:
-            entry["path"].unlink()
-        except OSError:
-            pass
+    get_store().remove_upload(file_id)
 
+
+# ---------------------------------------------------------------------------
+# Session helpers
+# ---------------------------------------------------------------------------
 
 def create_session(queue: asyncio.Queue, jobs: list) -> str:
     """Create a transcription session. Returns session_id."""
-    sid = str(uuid.uuid4())
-    _sessions[sid] = {
-        "queue": queue,
-        "task": None,
-        "jobs": jobs,
-        "status": "running",
-    }
-    return sid
+    return get_store().create_session(queue, jobs)
 
 
 def get_session(session_id: str) -> dict[str, Any] | None:
     """Get session by ID."""
-    return _sessions.get(session_id)
+    return get_store().get_session(session_id)
 
 
 def set_session_task(session_id: str, task: asyncio.Task) -> None:
     """Store the pipeline task for a session."""
-    if s := _sessions.get(session_id):
-        s["task"] = task
+    get_store().set_session_task(session_id, task)
 
 
 def complete_session(session_id: str) -> None:
     """Mark session as done."""
-    if s := _sessions.get(session_id):
-        s["status"] = "done"
+    get_store().complete_session(session_id)
 
 
 def cleanup_session(session_id: str) -> None:
     """Remove session and cleanup uploads used by its jobs."""
-    s = _sessions.pop(session_id, None)
-    if s and "jobs" in s:
-        for job in s["jobs"]:
-            path_str = str(job.path)
-            for fid, entry in list(_uploads.items()):
-                if str(entry["path"]) == path_str:
-                    remove_upload(fid)
-                    break
+    get_store().cleanup_session(session_id)
