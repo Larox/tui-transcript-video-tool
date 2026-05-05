@@ -107,6 +107,17 @@ CREATE TABLE IF NOT EXISTS action_items (
     created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS fill_in_blank (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id   INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    sentence   TEXT    NOT NULL,
+    answer     TEXT    NOT NULL,
+    hint       TEXT    NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    starred    INTEGER NOT NULL DEFAULT 0,
+    user_id    TEXT
+);
+
 CREATE TABLE IF NOT EXISTS study_sessions (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     session_date     TEXT    NOT NULL,
@@ -173,6 +184,19 @@ class HistoryDB:
                 self._conn.execute(
                     "ALTER TABLE flashcards ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"
                 )
+        # Add fill_in_blank table if missing (idempotent)
+        self._conn.executescript(
+            "CREATE TABLE IF NOT EXISTS fill_in_blank ("
+            "    id         INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "    video_id   INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,"
+            "    sentence   TEXT    NOT NULL,"
+            "    answer     TEXT    NOT NULL,"
+            "    hint       TEXT    NOT NULL DEFAULT '',"
+            "    sort_order INTEGER NOT NULL DEFAULT 0,"
+            "    starred    INTEGER NOT NULL DEFAULT 0,"
+            "    user_id    TEXT"
+            ");"
+        )
         self._conn.commit()
 
     # ------------------------------------------------------------------

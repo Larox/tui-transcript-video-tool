@@ -147,6 +147,63 @@ class StudyStore:
         ]
 
     # ------------------------------------------------------------------
+    # Fill-in-the-blank
+    # ------------------------------------------------------------------
+
+    def save_fill_in_blank(
+        self,
+        video_id: int,
+        items: list[dict],
+        *,
+        user_id: str | None = None,
+    ) -> None:
+        """Replace all fill-in-blank items for *video_id* with *items*.
+
+        Each dict in *items* must have ``sentence`` and ``answer`` keys.
+        The optional ``hint`` key (str) provides a short hint.
+        The optional ``starred`` key (bool) flags teacher-emphasized items.
+        """
+        self._db._conn.execute(
+            "DELETE FROM fill_in_blank WHERE video_id = ?", (video_id,)
+        )
+        for sort_order, item in enumerate(items):
+            starred = int(bool(item.get("starred", False)))
+            self._db._conn.execute(
+                "INSERT INTO fill_in_blank "
+                "(video_id, sentence, answer, hint, sort_order, starred, user_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    video_id,
+                    item["sentence"],
+                    item["answer"],
+                    item.get("hint", ""),
+                    sort_order,
+                    starred,
+                    user_id,
+                ),
+            )
+        self._db._conn.commit()
+
+    def get_fill_in_blank(self, video_id: int) -> list[dict]:
+        """Return all fill-in-blank items for *video_id* ordered by sort_order."""
+        rows = self._db._conn.execute(
+            "SELECT id, sentence, answer, hint, sort_order, starred "
+            "FROM fill_in_blank WHERE video_id = ? ORDER BY sort_order",
+            (video_id,),
+        ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "sentence": r[1],
+                "answer": r[2],
+                "hint": r[3],
+                "sort_order": r[4],
+                "starred": bool(r[5]),
+            }
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
     # Action items
     # ------------------------------------------------------------------
 

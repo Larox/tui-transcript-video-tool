@@ -1,4 +1,4 @@
-"""API routes for study-content generation (summary, Q&A, flashcards, action items)."""
+"""API routes for study-content generation (summary, Q&A, flashcards, action items, fill-in-blank)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from tui_transcript.api.schemas import (
     ActionItem,
     ActionItemsResponse,
     Flashcard,
+    FillInBlankItem,
+    FillInBlankResponse,
     FlashcardsResponse,
     QAPair,
     QAResponse,
@@ -37,7 +39,7 @@ def _sse_data(data: dict) -> str:
 
 
 async def _generation_stream(video_id: int, transcript: str) -> AsyncGenerator[str, None]:
-    """Run all 4 generators sequentially, saving each result and streaming progress."""
+    """Run all 5 generators sequentially, saving each result and streaming progress."""
     store = StudyStore()
     try:
         # --- summary ---
@@ -59,6 +61,11 @@ async def _generation_stream(video_id: int, transcript: str) -> AsyncGenerator[s
         action_items = await content_generator.generate_action_items(transcript)
         store.save_action_items(video_id, action_items)
         yield _sse_data({"type": "progress", "step": "action_items", "status": "done"})
+
+        # --- fill-in-the-blank ---
+        fill_in_blank = await content_generator.generate_fill_in_blank(transcript)
+        store.save_fill_in_blank(video_id, fill_in_blank)
+        yield _sse_data({"type": "progress", "step": "fill_in_blank", "status": "done"})
 
         yield _sse_data({"type": "complete"})
     finally:
@@ -154,5 +161,27 @@ def dismiss_action_item(video_id: int, item_id: int) -> dict:
     try:
         store.dismiss_action_item(item_id)
         return {"ok": True}
+    finally:
+        store.close()
+
+
+@router.get("/{video_id}/fill-in-blank", response_model=FillInBlankResponse)
+def get_fill_in_blank(video_id: int) -> FillInBlankResponse:
+    """Return fill-in-the-blank items for a video."""
+    store = _store()
+    try:
+        items = store.get_fill_in_blank(video_id)
+        return FillInBlankResponse(
+            items=[
+                FillInBlankItem(
+                    id=item["id"],
+                    sentence=item["sentence"],
+                    answer=item["answer"],
+                    hint=item["hint"],
+                    starred=item["starred"],
+                )
+                for item in items
+            ]
+        )
     finally:
         store.close()

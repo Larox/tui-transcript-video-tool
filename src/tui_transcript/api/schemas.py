@@ -362,6 +362,22 @@ class ActionItemsResponse(BaseModel):
     items: list[ActionItem]
 
 
+class FillInBlankItem(BaseModel):
+    """A single fill-in-the-blank item."""
+
+    id: int
+    sentence: str
+    answer: str
+    hint: str = ''
+    starred: bool = False
+
+
+class FillInBlankResponse(BaseModel):
+    """Response for GET /classes/{video_id}/fill-in-blank."""
+
+    items: list[FillInBlankItem]
+
+
 # ------------------------------------------------------------------
 # Dashboard
 # ------------------------------------------------------------------
