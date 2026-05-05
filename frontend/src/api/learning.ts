@@ -189,6 +189,28 @@ export async function getTrueFalse(videoId: number): Promise<TrueFalseResponse> 
   return res.json();
 }
 
+export interface ErrorDetectionItem {
+  id: number;
+  statement: string;
+  error: string;
+  correction: string;
+  explanation: string;
+  starred: boolean;
+}
+
+export interface ErrorDetectionResponse {
+  items: ErrorDetectionItem[];
+}
+
+export async function getErrorDetection(videoId: number): Promise<ErrorDetectionResponse> {
+  const res = await fetch(`${API_BASE}/classes/${videoId}/error-detection`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'No error detection items found');
+  }
+  return res.json();
+}
+
 export async function dismissActionItem(videoId: number, itemId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/classes/${videoId}/action-items/${itemId}/dismiss`, {
     method: 'PATCH',
@@ -247,7 +269,7 @@ export async function getStatsSummary(): Promise<StatsSummary> {
 // Generation SSE
 // ------------------------------------------------------------------
 
-export type GenerationStep = 'summary' | 'qa' | 'flashcards' | 'action_items' | 'fill_in_blank' | 'true_false';
+export type GenerationStep = 'summary' | 'qa' | 'flashcards' | 'action_items' | 'fill_in_blank' | 'true_false' | 'error_detection';
 
 export type GenerationEvent =
   | { type: 'progress'; step: GenerationStep; status: 'done' }

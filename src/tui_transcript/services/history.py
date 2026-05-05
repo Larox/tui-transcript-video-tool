@@ -129,6 +129,18 @@ CREATE TABLE IF NOT EXISTS true_false_statements (
     user_id     TEXT
 );
 
+CREATE TABLE IF NOT EXISTS error_detection_items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id    INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    statement   TEXT    NOT NULL,
+    error       TEXT    NOT NULL,
+    correction  TEXT    NOT NULL,
+    explanation TEXT    NOT NULL DEFAULT '',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    starred     INTEGER NOT NULL DEFAULT 0,
+    user_id     TEXT
+);
+
 CREATE TABLE IF NOT EXISTS study_sessions (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     session_date     TEXT    NOT NULL,
@@ -228,6 +240,20 @@ class HistoryDB:
                 video_id INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
                 statement TEXT NOT NULL,
                 is_true INTEGER NOT NULL DEFAULT 1,
+                explanation TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                starred INTEGER NOT NULL DEFAULT 0,
+                user_id TEXT
+            )
+        """)
+        # Add error_detection_items table if missing (idempotent)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS error_detection_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                video_id INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+                statement TEXT NOT NULL,
+                error TEXT NOT NULL,
+                correction TEXT NOT NULL,
                 explanation TEXT NOT NULL DEFAULT '',
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 starred INTEGER NOT NULL DEFAULT 0,
