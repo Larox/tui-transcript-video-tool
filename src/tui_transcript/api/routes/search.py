@@ -39,3 +39,19 @@ def list_videos() -> list[VideoEntry]:
         return [VideoEntry(**v) for v in store.list_videos()]
     finally:
         store.close()
+
+
+@router.get("/videos/{video_id}", response_model=VideoEntry)
+def get_video(video_id: int) -> VideoEntry:
+    """Return a single processed video by id."""
+    from fastapi import HTTPException
+    from tui_transcript.services.history import HistoryDB
+
+    db = HistoryDB()
+    try:
+        video = db.get_video_by_id(video_id)
+        if video is None:
+            raise HTTPException(404, f"Video id {video_id} not found")
+        return VideoEntry(**video)
+    finally:
+        db.close()
