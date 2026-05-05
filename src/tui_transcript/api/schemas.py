@@ -304,3 +304,80 @@ class VideoEntry(BaseModel):
     output_path: str | None
     language: str | None
     processed_at: str
+
+
+# ------------------------------------------------------------------
+# Content generation
+# ------------------------------------------------------------------
+
+
+class SummaryResponse(BaseModel):
+    """Response for GET /classes/{video_id}/summary."""
+
+    text: str
+    generated_at: str
+
+
+class QAPair(BaseModel):
+    """A single question-answer pair."""
+
+    question: str
+    answer: str
+
+
+class QAResponse(BaseModel):
+    """Response for GET /classes/{video_id}/qa."""
+
+    pairs: list[QAPair]
+
+
+class Flashcard(BaseModel):
+    """A single concept-definition flashcard."""
+
+    concept: str
+    definition: str
+
+
+class FlashcardsResponse(BaseModel):
+    """Response for GET /classes/{video_id}/flashcards."""
+
+    cards: list[Flashcard]
+
+
+class ActionItem(BaseModel):
+    """A single action item."""
+
+    id: int
+    text: str
+    urgency: str
+    extracted_date: str | None
+    dismissed: bool
+
+
+class ActionItemsResponse(BaseModel):
+    """Response for GET /classes/{video_id}/action-items."""
+
+    items: list[ActionItem]
+
+
+# ------------------------------------------------------------------
+# Dashboard
+# ------------------------------------------------------------------
+
+
+class AlertEntry(BaseModel):
+    """An action item in dashboard alerts response (includes video_id and created_at)."""
+
+    id: int
+    video_id: int
+    text: str
+    urgency: str
+    extracted_date: str | None
+    dismissed: bool
+    created_at: str
+
+
+class AlertsResponse(BaseModel):
+    """Response for GET /dashboard/alerts."""
+
+    alerts: list[AlertEntry]

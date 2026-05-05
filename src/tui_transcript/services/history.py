@@ -615,6 +615,34 @@ class HistoryDB:
             for r in rows
         ]
 
+    def get_video_by_id(self, video_id: int) -> dict | None:
+        """Return a single processed_video row by id, or None."""
+        row = self._conn.execute(
+            "SELECT id, source_path, output_title, output_path, language, processed_at "
+            "FROM processed_videos WHERE id = ?",
+            (video_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0],
+            "source_path": row[1],
+            "output_title": row[2],
+            "output_path": row[3],
+            "language": row[4],
+            "processed_at": row[5],
+        }
+
+    def get_transcript_content(self, video_id: int) -> str | None:
+        """Return the full transcript text for *video_id* from the FTS index, or None."""
+        row = self._conn.execute(
+            "SELECT content FROM transcript_search WHERE video_id = ?",
+            (video_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return row[0]
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
