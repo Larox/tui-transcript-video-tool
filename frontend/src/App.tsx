@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Bell, BookOpen, GraduationCap, Upload } from 'lucide-react';
+import { Bell, BookOpen, Brain, GraduationCap, Settings, Upload } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -23,13 +23,16 @@ import { Upload as UploadPage } from '@/pages/Upload';
 import { Collections } from '@/pages/Collections';
 import { Documents } from '@/pages/Documents';
 import { Config } from '@/pages/Config';
+import { Learn } from '@/pages/Learn';
 
 const queryClient = new QueryClient();
 
 const NAV_ITEMS = [
   { to: '/', end: true, icon: Bell, label: 'Dashboard' },
   { to: '/courses', end: false, icon: GraduationCap, label: 'Mis Materias' },
+  { to: '/learn', end: false, icon: Brain, label: 'Aprender' },
   { to: '/upload', end: false, icon: Upload, label: 'Subir Clase' },
+  { to: '/config', end: false, icon: Settings, label: 'Configuración' },
 ];
 
 function AppSidebar() {
@@ -104,6 +107,7 @@ function AppContent() {
             <Route path="/courses/:courseId" element={<CourseDetail />} />
             <Route path="/classes/:videoId" element={<ClassDetail />} />
             <Route path="/upload" element={<UploadPage />} />
+            <Route path="/learn" element={<Learn />} />
             {/* Legacy routes — keep working */}
             <Route path="/collections" element={<Collections />} />
             <Route path="/documents" element={<Documents />} />
