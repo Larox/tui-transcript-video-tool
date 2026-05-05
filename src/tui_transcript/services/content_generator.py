@@ -13,7 +13,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "claude-haiku-4-5-20251001"
+_MODEL = "claude-sonnet-4-6"
 
 _SUMMARY_SYSTEM = (
     "You are an expert academic assistant. Given a class or lecture transcript, "
