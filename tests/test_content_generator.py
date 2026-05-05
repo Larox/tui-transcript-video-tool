@@ -1,23 +1,38 @@
 """Tests for services/content_generator.py.
 
-All tests mock the Anthropic client so no real API key is required.
+Summary generation still uses the raw Anthropic SDK and is tested by mocking
+``anthropic.AsyncAnthropic``. All other generators use PydanticAI ``Agent``
+objects, which are mocked at the import site so the real LLM is never called.
 """
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from tui_transcript.services import content_generator
+from tui_transcript.services.content_generator import (
+    _ActionItem,
+    _ActionItemResult,
+    _ErrorDetectionItem,
+    _ErrorDetectionResult,
+    _FillInBlankItem,
+    _FillInBlankResult,
+    _FlashcardItem,
+    _FlashcardResult,
+    _QAItem,
+    _QAResult,
+    _TrueFalseItem,
+    _TrueFalseResult,
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_mock_client(response_text: str) -> MagicMock:
-    """Return a mock AsyncAnthropic client whose messages.create returns response_text."""
+def _make_mock_anthropic_client(response_text: str) -> MagicMock:
+    """Mock AsyncAnthropic whose messages.create returns response_text."""
     mock_msg = MagicMock()
     mock_msg.content = [MagicMock(text=response_text)]
 
@@ -29,6 +44,33 @@ def _make_mock_client(response_text: str) -> MagicMock:
     return mock_client
 
 
+def _mock_agent(output_obj) -> MagicMock:
+    """Mock instance returned by Agent(...) — agent.run() resolves to AgentRunResult-like with .output=output_obj."""
+    run_result = MagicMock()
+    run_result.output = output_obj
+    agent_instance = MagicMock()
+    agent_instance.run = AsyncMock(return_value=run_result)
+    return agent_instance
+
+
+def _patch_agent(output_obj):
+    """Context manager that patches Agent in the content_generator module."""
+    return patch(
+        "tui_transcript.services.content_generator.Agent",
+        return_value=_mock_agent(output_obj),
+    )
+
+
+def _patch_agent_failing(exc: Exception):
+    """Patch Agent so its .run raises the given exception — exercises the empty-on-failure path."""
+    failing = MagicMock()
+    failing.run = AsyncMock(side_effect=exc)
+    return patch(
+        "tui_transcript.services.content_generator.Agent",
+        return_value=failing,
+    )
+
+
 SAMPLE_TRANSCRIPT = (
     "Today we discussed Newton's laws of motion. "
     "The first law states that an object at rest stays at rest. "
@@ -38,13 +80,14 @@ SAMPLE_TRANSCRIPT = (
 
 
 # ---------------------------------------------------------------------------
-# generate_summary
+# generate_summary (raw Anthropic SDK)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_generate_summary_returns_text(monkeypatch):
-    mock_client = _make_mock_client("This lecture covered Newton's laws.")
+    mock_client = _make_mock_anthropic_client("This lecture covered Newton's laws.")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
 
     with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await content_generator.generate_summary(SAMPLE_TRANSCRIPT)
@@ -52,8 +95,8 @@ async def test_generate_summary_returns_text(monkeypatch):
     assert result == "This lecture covered Newton's laws."
     mock_client.messages.create.assert_awaited_once()
     call_kwargs = mock_client.messages.create.call_args.kwargs
-    assert call_kwargs["model"] == content_generator._MODEL
-    assert call_kwargs["system"] == content_generator._SUMMARY_SYSTEM
+    assert call_kwargs["model"] == "claude-sonnet-4-6"
+    assert call_kwargs["system"] == content_generator._SUMMARY_INSTRUCTIONS
 
 
 @pytest.mark.asyncio
@@ -65,26 +108,52 @@ async def test_generate_summary_empty_transcript():
 @pytest.mark.asyncio
 async def test_generate_summary_no_api_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
     result = await content_generator.generate_summary(SAMPLE_TRANSCRIPT)
     assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# _get_model
+# ---------------------------------------------------------------------------
+
+def test_get_model_defaults_to_anthropic(monkeypatch):
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    monkeypatch.delenv("AI_MODEL", raising=False)
+    assert content_generator._get_model() == "anthropic:claude-sonnet-4-6"
+
+
+def test_get_model_openai(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.delenv("AI_MODEL", raising=False)
+    assert content_generator._get_model() == "openai:gpt-4o"
+
+
+def test_get_model_google(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "google")
+    monkeypatch.delenv("AI_MODEL", raising=False)
+    assert content_generator._get_model() == "google-gla:gemini-2.0-flash"
+
+
+def test_get_model_respects_ai_model_override(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "anthropic")
+    monkeypatch.setenv("AI_MODEL", "claude-haiku-4-5-20251001")
+    assert content_generator._get_model() == "anthropic:claude-haiku-4-5-20251001"
 
 
 # ---------------------------------------------------------------------------
 # generate_qa_pairs
 # ---------------------------------------------------------------------------
 
-_QA_JSON = json.dumps([
-    {"question": "What is Newton's first law?", "answer": "An object at rest stays at rest.", "starred": False},
-    {"question": "What is inertia?", "answer": "Resistance to change in motion.", "starred": True},
-])
-
-
 @pytest.mark.asyncio
-async def test_generate_qa_pairs_parses_json(monkeypatch):
-    mock_client = _make_mock_client(_QA_JSON)
+async def test_generate_qa_pairs_returns_dicts(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _QAResult(pairs=[
+        _QAItem(question="What is Newton's first law?", answer="An object at rest stays at rest.", starred=False),
+        _QAItem(question="What is inertia?", answer="Resistance to change in motion.", starred=True),
+    ])
 
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+    with _patch_agent(output):
         result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
 
     assert len(result) == 2
@@ -98,31 +167,25 @@ async def test_generate_qa_pairs_parses_json(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_generate_qa_pairs_filters_invalid_items(monkeypatch):
-    # One item is missing 'answer' — should be filtered out
-    bad_json = json.dumps([
-        {"question": "What is inertia?", "answer": "Resistance to change."},
-        {"question": "Missing answer only"},
-        {"not_a_question": "irrelevant"},
-    ])
-    mock_client = _make_mock_client(bad_json)
+async def test_generate_qa_pairs_starred_defaults_to_false(monkeypatch):
+    """Items omitting ``starred`` should fall back to the Pydantic default of False."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    # Build the item without supplying starred — the Pydantic default takes over.
+    output = _QAResult(pairs=[_QAItem(question="What is gravity?", answer="A fundamental force.")])
 
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+    with _patch_agent(output):
         result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
 
     assert len(result) == 1
-    assert result[0]["question"] == "What is inertia?"
+    assert result[0]["starred"] is False
 
 
 @pytest.mark.asyncio
-async def test_generate_qa_pairs_handles_invalid_json(monkeypatch):
-    mock_client = _make_mock_client("not valid json at all")
+async def test_generate_qa_pairs_handles_agent_failure(monkeypatch):
+    """If the agent.run raises, the function logs and returns []."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+    with _patch_agent_failing(RuntimeError("model failed validation")):
         result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
-
     assert result == []
 
 
@@ -132,22 +195,30 @@ async def test_generate_qa_pairs_empty_transcript():
     assert result == []
 
 
+@pytest.mark.asyncio
+async def test_generate_qa_pairs_no_api_key(monkeypatch):
+    """No API key for the configured provider → empty result, no agent constructed."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    with patch("tui_transcript.services.content_generator.Agent") as MockAgent:
+        result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
+    assert result == []
+    MockAgent.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # generate_flashcards
 # ---------------------------------------------------------------------------
 
-_FLASHCARD_JSON = json.dumps([
-    {"concept": "Newton's First Law", "definition": "An object at rest stays at rest unless acted on.", "starred": True},
-    {"concept": "Inertia", "definition": "The resistance of an object to changes in its state of motion.", "starred": False},
-])
-
-
 @pytest.mark.asyncio
-async def test_generate_flashcards_parses_json(monkeypatch):
-    mock_client = _make_mock_client(_FLASHCARD_JSON)
+async def test_generate_flashcards_returns_dicts(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _FlashcardResult(cards=[
+        _FlashcardItem(concept="Newton's First Law", definition="An object at rest stays at rest unless acted on.", starred=True),
+        _FlashcardItem(concept="Inertia", definition="The resistance of an object to changes in motion.", starred=False),
+    ])
 
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+    with _patch_agent(output):
         result = await content_generator.generate_flashcards(SAMPLE_TRANSCRIPT)
 
     assert len(result) == 2
@@ -158,18 +229,15 @@ async def test_generate_flashcards_parses_json(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_generate_flashcards_filters_invalid_items(monkeypatch):
-    bad_json = json.dumps([
-        {"concept": "Inertia", "definition": "Resistance to change."},
-        {"concept": "No definition here"},
-    ])
-    mock_client = _make_mock_client(bad_json)
+async def test_generate_flashcards_starred_defaults_to_false(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _FlashcardResult(cards=[_FlashcardItem(concept="Entropy", definition="Measure of disorder.")])
 
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+    with _patch_agent(output):
         result = await content_generator.generate_flashcards(SAMPLE_TRANSCRIPT)
 
     assert len(result) == 1
+    assert result[0]["starred"] is False
 
 
 @pytest.mark.asyncio
@@ -182,18 +250,15 @@ async def test_generate_flashcards_empty_transcript():
 # generate_action_items
 # ---------------------------------------------------------------------------
 
-_ACTION_JSON = json.dumps([
-    {"text": "Read chapter 3", "urgency": "high", "extracted_date": "May 9th"},
-    {"text": "Submit lab report", "urgency": "medium", "extracted_date": None},
-])
-
-
 @pytest.mark.asyncio
-async def test_generate_action_items_parses_json(monkeypatch):
-    mock_client = _make_mock_client(_ACTION_JSON)
+async def test_generate_action_items_returns_dicts(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _ActionItemResult(items=[
+        _ActionItem(text="Read chapter 3", urgency="high", extracted_date="May 9th"),
+        _ActionItem(text="Submit lab report", urgency="medium", extracted_date=None),
+    ])
 
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+    with _patch_agent(output):
         result = await content_generator.generate_action_items(SAMPLE_TRANSCRIPT)
 
     assert len(result) == 2
@@ -204,13 +269,11 @@ async def test_generate_action_items_parses_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_generate_action_items_defaults_missing_urgency(monkeypatch):
-    json_no_urgency = json.dumps([
-        {"text": "Do homework"},  # no urgency field
-    ])
-    mock_client = _make_mock_client(json_no_urgency)
+    """The Pydantic default urgency is 'medium' when omitted."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _ActionItemResult(items=[_ActionItem(text="Do homework")])
 
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+    with _patch_agent(output):
         result = await content_generator.generate_action_items(SAMPLE_TRANSCRIPT)
 
     assert result[0]["urgency"] == "medium"
@@ -220,6 +283,128 @@ async def test_generate_action_items_defaults_missing_urgency(monkeypatch):
 @pytest.mark.asyncio
 async def test_generate_action_items_empty_transcript():
     result = await content_generator.generate_action_items("")
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# generate_fill_in_blank
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_generate_fill_in_blank_returns_dicts(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _FillInBlankResult(items=[
+        _FillInBlankItem(sentence="The ___ is the resistance to change.", answer="inertia", hint="starts with i", starred=True),
+    ])
+
+    with _patch_agent(output):
+        result = await content_generator.generate_fill_in_blank(SAMPLE_TRANSCRIPT)
+
+    assert len(result) == 1
+    assert result[0] == {
+        "sentence": "The ___ is the resistance to change.",
+        "answer": "inertia",
+        "hint": "starts with i",
+        "starred": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_generate_fill_in_blank_empty_transcript():
+    result = await content_generator.generate_fill_in_blank("")
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# generate_true_false
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_generate_true_false_returns_dicts(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _TrueFalseResult(items=[
+        _TrueFalseItem(statement="Newton's first law is about inertia.", is_true=True, explanation="Correct.", starred=False),
+        _TrueFalseItem(statement="F=mv.", is_true=False, explanation="It's F=ma.", starred=True),
+    ])
+
+    with _patch_agent(output):
+        result = await content_generator.generate_true_false(SAMPLE_TRANSCRIPT)
+
+    assert len(result) == 2
+    assert result[0]["is_true"] is True
+    assert result[1]["is_true"] is False
+    assert result[1]["starred"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_true_false_empty_transcript():
+    result = await content_generator.generate_true_false("")
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# generate_error_detection
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_generate_error_detection_returns_dicts(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _ErrorDetectionResult(items=[
+        _ErrorDetectionItem(
+            statement="Newton's second law relates force and velocity.",
+            error="velocity",
+            correction="acceleration",
+            explanation="F=ma involves acceleration, not velocity.",
+            starred=False,
+        ),
+        _ErrorDetectionItem(
+            statement="The third law states action and reaction are unequal.",
+            error="unequal",
+            correction="equal",
+            explanation="Action and reaction forces are always equal in magnitude.",
+            starred=True,
+        ),
+    ])
+
+    with _patch_agent(output):
+        result = await content_generator.generate_error_detection(SAMPLE_TRANSCRIPT)
+
+    assert len(result) == 2
+    assert result[0] == {
+        "statement": "Newton's second law relates force and velocity.",
+        "error": "velocity",
+        "correction": "acceleration",
+        "explanation": "F=ma involves acceleration, not velocity.",
+        "starred": False,
+    }
+    assert result[1]["correction"] == "equal"
+    assert result[1]["starred"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_error_detection_starred_defaults_to_false(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    output = _ErrorDetectionResult(items=[
+        _ErrorDetectionItem(statement="Some statement.", error="error", correction="fix", explanation="Explanation."),
+    ])
+
+    with _patch_agent(output):
+        result = await content_generator.generate_error_detection(SAMPLE_TRANSCRIPT)
+
+    assert result[0]["starred"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_error_detection_handles_agent_failure(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    with _patch_agent_failing(ValueError("invalid")):
+        result = await content_generator.generate_error_detection(SAMPLE_TRANSCRIPT)
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_generate_error_detection_empty_transcript():
+    result = await content_generator.generate_error_detection("")
     assert result == []
 
 
@@ -255,153 +440,12 @@ async def test_generate_all_returns_combined_dict(monkeypatch):
 @pytest.mark.asyncio
 async def test_generate_all_empty_transcript():
     result = await content_generator.generate_all("")
-    assert result == {"summary": "", "qa_pairs": [], "flashcards": [], "action_items": [], "fill_in_blank": [], "true_false": [], "error_detection": []}
-
-
-# ---------------------------------------------------------------------------
-# generate_error_detection
-# ---------------------------------------------------------------------------
-
-_ERROR_DETECTION_JSON = json.dumps([
-    {"statement": "Newton's second law relates force and velocity.", "error": "velocity", "correction": "acceleration", "explanation": "F=ma involves acceleration, not velocity.", "starred": False},
-    {"statement": "The third law states action and reaction are unequal.", "error": "unequal", "correction": "equal", "explanation": "Action and reaction forces are always equal in magnitude.", "starred": True},
-])
-
-
-@pytest.mark.asyncio
-async def test_generate_error_detection_parses_json(monkeypatch):
-    mock_client = _make_mock_client(_ERROR_DETECTION_JSON)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await content_generator.generate_error_detection(SAMPLE_TRANSCRIPT)
-
-    assert len(result) == 2
-    assert result[0] == {
-        "statement": "Newton's second law relates force and velocity.",
-        "error": "velocity",
-        "correction": "acceleration",
-        "explanation": "F=ma involves acceleration, not velocity.",
-        "starred": False,
+    assert result == {
+        "summary": "",
+        "qa_pairs": [],
+        "flashcards": [],
+        "action_items": [],
+        "fill_in_blank": [],
+        "true_false": [],
+        "error_detection": [],
     }
-    assert result[1]["correction"] == "equal"
-    assert result[1]["starred"] is True
-
-
-@pytest.mark.asyncio
-async def test_generate_error_detection_filters_invalid_items(monkeypatch):
-    bad_json = json.dumps([
-        {"statement": "Valid item.", "error": "wrong", "correction": "right", "explanation": "Because."},
-        {"statement": "Missing error field.", "correction": "right"},
-        {"not_a_statement": "irrelevant"},
-    ])
-    mock_client = _make_mock_client(bad_json)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await content_generator.generate_error_detection(SAMPLE_TRANSCRIPT)
-
-    assert len(result) == 1
-    assert result[0]["error"] == "wrong"
-
-
-@pytest.mark.asyncio
-async def test_generate_error_detection_handles_invalid_json(monkeypatch):
-    mock_client = _make_mock_client("not valid json at all")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await content_generator.generate_error_detection(SAMPLE_TRANSCRIPT)
-
-    assert result == []
-
-
-@pytest.mark.asyncio
-async def test_generate_error_detection_empty_transcript():
-    result = await content_generator.generate_error_detection("")
-    assert result == []
-
-
-@pytest.mark.asyncio
-async def test_generate_error_detection_starred_defaults_to_false(monkeypatch):
-    json_without_starred = json.dumps([
-        {"statement": "Some statement with an error.", "error": "error", "correction": "fix", "explanation": "Explanation."},
-    ])
-    mock_client = _make_mock_client(json_without_starred)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await content_generator.generate_error_detection(SAMPLE_TRANSCRIPT)
-
-    assert len(result) == 1
-    assert result[0]["starred"] is False
-
-
-# ---------------------------------------------------------------------------
-# starred field behaviour
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_generate_qa_pairs_starred_defaults_to_false(monkeypatch):
-    """Items missing the 'starred' field should default to False."""
-    json_without_starred = json.dumps([
-        {"question": "What is gravity?", "answer": "A fundamental force."},
-    ])
-    mock_client = _make_mock_client(json_without_starred)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
-
-    assert len(result) == 1
-    assert result[0]["starred"] is False
-
-
-@pytest.mark.asyncio
-async def test_generate_qa_pairs_starred_true_when_set(monkeypatch):
-    """Items with starred=true should have starred=True in the result."""
-    json_with_starred = json.dumps([
-        {"question": "This is on the exam?", "answer": "Yes.", "starred": True},
-        {"question": "Normal question?", "answer": "Normal answer.", "starred": False},
-    ])
-    mock_client = _make_mock_client(json_with_starred)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
-
-    assert result[0]["starred"] is True
-    assert result[1]["starred"] is False
-
-
-@pytest.mark.asyncio
-async def test_generate_flashcards_starred_defaults_to_false(monkeypatch):
-    """Flashcard items missing the 'starred' field should default to False."""
-    json_without_starred = json.dumps([
-        {"concept": "Entropy", "definition": "Measure of disorder."},
-    ])
-    mock_client = _make_mock_client(json_without_starred)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await content_generator.generate_flashcards(SAMPLE_TRANSCRIPT)
-
-    assert len(result) == 1
-    assert result[0]["starred"] is False
-
-
-@pytest.mark.asyncio
-async def test_generate_flashcards_starred_true_when_set(monkeypatch):
-    """Flashcard items with starred=true should have starred=True in the result."""
-    json_with_starred = json.dumps([
-        {"concept": "Key theorem", "definition": "Pay attention to this.", "starred": True},
-        {"concept": "Other concept", "definition": "Less critical.", "starred": False},
-    ])
-    mock_client = _make_mock_client(json_with_starred)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await content_generator.generate_flashcards(SAMPLE_TRANSCRIPT)
-
-    assert result[0]["starred"] is True
-    assert result[1]["starred"] is False
