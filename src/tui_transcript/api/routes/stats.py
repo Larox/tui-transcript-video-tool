@@ -8,14 +8,14 @@ from fastapi import APIRouter
 
 from tui_transcript.api.schemas import (
     DailySessionEntry,
-    LogSessionRequest,
+    LogActivityRequest,
     StatsSummaryResponse,
 )
 from tui_transcript.services.history import HistoryDB
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
-DAILY_GOAL = 10  # cards per day
+DAILY_GOAL = 10  # items per day
 
 
 def _db() -> HistoryDB:
@@ -60,27 +60,25 @@ def _compute_streak(session_dates: set[str]) -> tuple[int, int]:
     return current, longest
 
 
-@router.post("/session", status_code=204)
-def log_session(body: LogSessionRequest) -> None:
-    """Log (or update) a study session for today.
+@router.post("/activity", status_code=204)
+def log_activity(body: LogActivityRequest) -> None:
+    """Log (or update) an activity entry for today.
 
-    One row per calendar day — upserts by adding to existing counts.
+    One row per (calendar day, activity_type) — upserts by accumulating on conflict.
     """
     db = _db()
     try:
         today = _today()
         conn = db._conn
-        # Try to insert; on conflict (same date + null user_id) add to existing counts
         conn.execute(
             """
-            INSERT INTO study_sessions (session_date, cards_reviewed, quizzes_correct, quizzes_total)
+            INSERT INTO activity_log (log_date, activity_type, items_done, items_correct)
             VALUES (?, ?, ?, ?)
-            ON CONFLICT(session_date, COALESCE(user_id, '')) DO UPDATE SET
-                cards_reviewed  = cards_reviewed  + excluded.cards_reviewed,
-                quizzes_correct = quizzes_correct + excluded.quizzes_correct,
-                quizzes_total   = quizzes_total   + excluded.quizzes_total
+            ON CONFLICT(log_date, activity_type, COALESCE(user_id, '')) DO UPDATE SET
+                items_done    = items_done    + excluded.items_done,
+                items_correct = items_correct + excluded.items_correct
             """,
-            (today, body.cards_reviewed, body.quizzes_correct, body.quizzes_total),
+            (today, body.activity_type, body.items_done, body.items_correct),
         )
         conn.commit()
     finally:
@@ -94,56 +92,66 @@ def get_summary() -> StatsSummaryResponse:
     try:
         conn = db._conn
 
-        # All sessions
-        rows = conn.execute(
-            "SELECT session_date, cards_reviewed, quizzes_correct, quizzes_total "
-            "FROM study_sessions ORDER BY session_date"
+        # Total sessions = COUNT(DISTINCT log_date)
+        total_sessions_row = conn.execute(
+            "SELECT COUNT(DISTINCT log_date) FROM activity_log"
+        ).fetchone()
+        total_sessions = total_sessions_row[0] if total_sessions_row else 0
+
+        # Totals across all activity types
+        totals_row = conn.execute(
+            "SELECT COALESCE(SUM(items_done), 0), COALESCE(SUM(items_correct), 0) "
+            "FROM activity_log"
+        ).fetchone()
+        total_items_done = totals_row[0] if totals_row else 0
+        total_items_correct = totals_row[1] if totals_row else 0
+
+        # Distinct log_dates for streak calculation
+        date_rows = conn.execute(
+            "SELECT DISTINCT log_date FROM activity_log ORDER BY log_date"
         ).fetchall()
-
-        all_sessions = [
-            {"date": r[0], "cards_reviewed": r[1], "quizzes_correct": r[2], "quizzes_total": r[3]}
-            for r in rows
-        ]
-
-        # Totals
-        total_sessions = len(all_sessions)
-        total_cards = sum(s["cards_reviewed"] for s in all_sessions)
-        total_correct = sum(s["quizzes_correct"] for s in all_sessions)
-        total_total = sum(s["quizzes_total"] for s in all_sessions)
-
-        # Streaks
-        session_dates = {s["date"] for s in all_sessions}
+        session_dates = {r[0] for r in date_rows}
         current_streak, longest_streak = _compute_streak(session_dates)
 
-        # Last 30 days
+        # Last 30 days: GROUP BY log_date, SUM items_done and items_correct
         today = date.today()
         cutoff = (today - timedelta(days=29)).isoformat()
+        last_30_rows = conn.execute(
+            """
+            SELECT log_date, SUM(items_done), SUM(items_correct)
+            FROM activity_log
+            WHERE log_date >= ?
+            GROUP BY log_date
+            ORDER BY log_date
+            """,
+            (cutoff,),
+        ).fetchall()
         last_30 = [
             DailySessionEntry(
-                date=s["date"],
-                cards_reviewed=s["cards_reviewed"],
-                quizzes_correct=s["quizzes_correct"],
-                quizzes_total=s["quizzes_total"],
+                date=r[0],
+                items_done=r[1],
+                items_correct=r[2],
             )
-            for s in all_sessions
-            if s["date"] >= cutoff
+            for r in last_30_rows
         ]
 
-        # Today's cards
+        # Today's items
         today_str = today.isoformat()
-        today_row = next((s for s in all_sessions if s["date"] == today_str), None)
-        today_cards = today_row["cards_reviewed"] if today_row else 0
+        today_row = conn.execute(
+            "SELECT COALESCE(SUM(items_done), 0) FROM activity_log WHERE log_date = ?",
+            (today_str,),
+        ).fetchone()
+        today_items = today_row[0] if today_row else 0
 
         return StatsSummaryResponse(
             current_streak=current_streak,
             longest_streak=longest_streak,
             total_sessions=total_sessions,
-            total_cards_reviewed=total_cards,
-            total_quizzes_correct=total_correct,
-            total_quizzes_total=total_total,
+            total_items_done=total_items_done,
+            total_items_correct=total_items_correct,
             sessions_last_30_days=last_30,
             daily_goal=DAILY_GOAL,
-            today_cards=today_cards,
+            today_items=today_items,
         )
     finally:
         db.close()

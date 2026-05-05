@@ -14,9 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 // Helpers
 // ------------------------------------------------------------------
 
-function heatColor(cards: number): string {
-  if (cards === 0) return '#e5e7eb';       // gray-200
-  if (cards <= 10) return '#86efac';       // green-300
+function heatColor(items: number): string {
+  if (items === 0) return '#e5e7eb';       // gray-200
+  if (items <= 10) return '#86efac';       // green-300
   return '#16a34a';                        // green-600
 }
 
@@ -52,20 +52,20 @@ function MetricCard({ value, label, icon }: { value: string; label: string; icon
 // ------------------------------------------------------------------
 
 function Heatmap({ sessions }: { sessions: DailySessionEntry[] }) {
-  // Build a lookup map date -> cards_reviewed
+  // Build a lookup map date -> items_done
   const map = new Map<string, number>();
   for (const s of sessions) {
-    map.set(s.date, s.cards_reviewed);
+    map.set(s.date, s.items_done);
   }
 
   // Generate last 30 days
   const today = new Date();
-  const days: Array<{ date: string; cards: number }> = [];
+  const days: Array<{ date: string; items: number }> = [];
   for (let i = 29; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const iso = d.toISOString().split('T')[0];
-    days.push({ date: iso, cards: map.get(iso) ?? 0 });
+    days.push({ date: iso, items: map.get(iso) ?? 0 });
   }
 
   return (
@@ -77,15 +77,15 @@ function Heatmap({ sessions }: { sessions: DailySessionEntry[] }) {
           gap: '4px',
         }}
       >
-        {days.map(({ date, cards }) => (
+        {days.map(({ date, items }) => (
           <div
             key={date}
-            title={`${formatDate(date)}: ${cards} tarjetas`}
+            title={`${formatDate(date)}: ${items} ítems`}
             style={{
               width: '100%',
               paddingTop: '100%',
               borderRadius: '3px',
-              backgroundColor: heatColor(cards),
+              backgroundColor: heatColor(items),
               cursor: 'default',
             }}
           />
@@ -122,21 +122,21 @@ function RecentSessions({ sessions }: { sessions: DailySessionEntry[] }) {
         <thead>
           <tr className="border-b text-muted-foreground">
             <th className="text-left py-2 pr-4 font-medium">Fecha</th>
-            <th className="text-right py-2 pr-4 font-medium">Tarjetas</th>
-            <th className="text-right py-2 font-medium">Quiz</th>
+            <th className="text-right py-2 pr-4 font-medium">Ítems</th>
+            <th className="text-right py-2 font-medium">Correctos</th>
           </tr>
         </thead>
         <tbody>
           {last10.map((s) => {
-            const score =
-              s.quizzes_total > 0
-                ? `${s.quizzes_correct}/${s.quizzes_total} (${Math.round((s.quizzes_correct / s.quizzes_total) * 100)}%)`
+            const accuracy =
+              s.items_done > 0
+                ? `${s.items_correct}/${s.items_done} (${Math.round((s.items_correct / s.items_done) * 100)}%)`
                 : '—';
             return (
               <tr key={s.date} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-2 pr-4 tabular-nums">{formatDate(s.date)}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{s.cards_reviewed}</td>
-                <td className="py-2 text-right tabular-nums">{score}</td>
+                <td className="py-2 pr-4 text-right tabular-nums">{s.items_done}</td>
+                <td className="py-2 text-right tabular-nums">{accuracy}</td>
               </tr>
             );
           })}
@@ -161,13 +161,12 @@ interface Achievement {
 function buildAchievements(data: {
   total_sessions: number;
   longest_streak: number;
-  total_cards_reviewed: number;
-  total_quizzes_total: number;
-  total_quizzes_correct: number;
+  total_items_done: number;
+  total_items_correct: number;
 }): Achievement[] {
-  const quizRate =
-    data.total_quizzes_total > 0
-      ? data.total_quizzes_correct / data.total_quizzes_total
+  const accuracy =
+    data.total_items_done > 0
+      ? data.total_items_correct / data.total_items_done
       : 0;
 
   return [
@@ -193,18 +192,18 @@ function buildAchievements(data: {
       requirement: 'Mantén una racha de 7 días',
     },
     {
-      id: '100-cards',
-      label: '100 tarjetas',
+      id: '100-items',
+      label: '100 ítems',
       icon: '🎯',
-      unlocked: data.total_cards_reviewed >= 100,
-      requirement: 'Revisa 100 tarjetas en total',
+      unlocked: data.total_items_done >= 100,
+      requirement: 'Completa 100 ítems de estudio en total',
     },
     {
-      id: 'quiz-master',
-      label: 'Maestro del quiz',
+      id: 'accuracy-master',
+      label: 'Maestro de precisión',
       icon: '🧠',
-      unlocked: data.total_quizzes_total >= 50 && quizRate >= 0.8,
-      requirement: '50+ quizzes con 80% de acierto',
+      unlocked: data.total_items_done >= 50 && accuracy >= 0.8,
+      requirement: '50+ ítems con 80% de acierto',
     },
   ];
 }
@@ -259,9 +258,9 @@ export function Stats() {
     );
   }
 
-  const quizPct =
-    data.total_quizzes_total > 0
-      ? Math.round((data.total_quizzes_correct / data.total_quizzes_total) * 100)
+  const accuracyPct =
+    data.total_items_done > 0
+      ? Math.round((data.total_items_correct / data.total_items_done) * 100)
       : null;
 
   const achievements = buildAchievements(data);
@@ -276,11 +275,11 @@ export function Stats() {
       {/* Header metrics */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MetricCard value={String(data.current_streak)} label="Racha actual" icon="🔥" />
-        <MetricCard value={String(data.total_sessions)} label="Sesiones totales" />
-        <MetricCard value={String(data.total_cards_reviewed)} label="Tarjetas revisadas" />
+        <MetricCard value={String(data.total_sessions)} label="Días activos" />
+        <MetricCard value={String(data.total_items_done)} label="Ítems completados" />
         <MetricCard
-          value={quizPct !== null ? `${quizPct}%` : '—'}
-          label="Acierto en quizzes"
+          value={accuracyPct !== null ? `${accuracyPct}%` : '—'}
+          label="Precisión general"
         />
       </div>
 

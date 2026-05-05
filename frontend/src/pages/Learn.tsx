@@ -10,7 +10,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Brain, ArrowLeft, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
 import { getCollections, getCollection, type CollectionEntry, type CollectionItemEntry } from '@/api/client';
-import { getFlashcards, getQA, getFillInBlank, logStudySession, type Flashcard, type QAPair, type FillInBlankItem as ApiFillInBlankItem } from '@/api/learning';
+import { getFlashcards, getQA, getFillInBlank, logActivity, type Flashcard, type QAPair, type FillInBlankItem as ApiFillInBlankItem } from '@/api/learning';
 import { Button } from '@/components/ui/button';
 
 // ------------------------------------------------------------------
@@ -730,14 +730,12 @@ export function Learn() {
     setFinished(false);
   }, [contentQuery.data]);
 
-  // Log the session when it finishes (fire-and-forget)
+  // Log the session when it finishes (fire-and-forget, separate call per activity type)
   useEffect(() => {
     if (!finished) return;
-    logStudySession(
-      flashcardsReviewed,
-      quizCorrect + fillInCorrect,
-      quizTotal + fillInTotal
-    );
+    if (flashcardsReviewed > 0) logActivity('flashcard', flashcardsReviewed, flashcardsReviewed);
+    if (quizTotal > 0) logActivity('quiz', quizTotal, quizCorrect);
+    if (fillInTotal > 0) logActivity('fill_in_blank', fillInTotal, fillInCorrect);
   }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const advance = useCallback(() => {

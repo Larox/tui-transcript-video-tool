@@ -402,25 +402,24 @@ class AlertsResponse(BaseModel):
 
 
 # ------------------------------------------------------------------
-# Study sessions / stats (SEB-81, SEB-90)
+# Activity log / stats (SEB-81, SEB-90, refactor/activity-log)
 # ------------------------------------------------------------------
 
 
-class LogSessionRequest(BaseModel):
-    """Payload for POST /stats/session."""
+class LogActivityRequest(BaseModel):
+    """Payload for POST /stats/activity."""
 
-    cards_reviewed: int = Field(0, ge=0)
-    quizzes_correct: int = Field(0, ge=0)
-    quizzes_total: int = Field(0, ge=0)
+    activity_type: str = Field(..., min_length=1)
+    items_done: int = Field(0, ge=0)
+    items_correct: int = Field(0, ge=0)
 
 
 class DailySessionEntry(BaseModel):
-    """A single day's session data in the summary."""
+    """A single day's aggregated activity data in the summary."""
 
     date: str
-    cards_reviewed: int
-    quizzes_correct: int
-    quizzes_total: int
+    items_done: int
+    items_correct: int
 
 
 class StatsSummaryResponse(BaseModel):
@@ -428,10 +427,9 @@ class StatsSummaryResponse(BaseModel):
 
     current_streak: int
     longest_streak: int
-    total_sessions: int
-    total_cards_reviewed: int
-    total_quizzes_correct: int
-    total_quizzes_total: int
+    total_sessions: int       # distinct days with activity
+    total_items_done: int
+    total_items_correct: int
     sessions_last_30_days: list[DailySessionEntry]
     daily_goal: int
-    today_cards: int
+    today_items: int
