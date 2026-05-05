@@ -74,8 +74,8 @@ async def test_generate_summary_no_api_key(monkeypatch):
 # ---------------------------------------------------------------------------
 
 _QA_JSON = json.dumps([
-    {"question": "What is Newton's first law?", "answer": "An object at rest stays at rest."},
-    {"question": "What is inertia?", "answer": "Resistance to change in motion."},
+    {"question": "What is Newton's first law?", "answer": "An object at rest stays at rest.", "starred": False},
+    {"question": "What is inertia?", "answer": "Resistance to change in motion.", "starred": True},
 ])
 
 
@@ -88,8 +88,13 @@ async def test_generate_qa_pairs_parses_json(monkeypatch):
         result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
 
     assert len(result) == 2
-    assert result[0] == {"question": "What is Newton's first law?", "answer": "An object at rest stays at rest."}
+    assert result[0] == {
+        "question": "What is Newton's first law?",
+        "answer": "An object at rest stays at rest.",
+        "starred": False,
+    }
     assert result[1]["answer"] == "Resistance to change in motion."
+    assert result[1]["starred"] is True
 
 
 @pytest.mark.asyncio
@@ -132,8 +137,8 @@ async def test_generate_qa_pairs_empty_transcript():
 # ---------------------------------------------------------------------------
 
 _FLASHCARD_JSON = json.dumps([
-    {"concept": "Newton's First Law", "definition": "An object at rest stays at rest unless acted on."},
-    {"concept": "Inertia", "definition": "The resistance of an object to changes in its state of motion."},
+    {"concept": "Newton's First Law", "definition": "An object at rest stays at rest unless acted on.", "starred": True},
+    {"concept": "Inertia", "definition": "The resistance of an object to changes in its state of motion.", "starred": False},
 ])
 
 
@@ -147,7 +152,9 @@ async def test_generate_flashcards_parses_json(monkeypatch):
 
     assert len(result) == 2
     assert result[0]["concept"] == "Newton's First Law"
+    assert result[0]["starred"] is True
     assert "resistance" in result[1]["definition"].lower()
+    assert result[1]["starred"] is False
 
 
 @pytest.mark.asyncio
@@ -243,3 +250,73 @@ async def test_generate_all_returns_combined_dict(monkeypatch):
 async def test_generate_all_empty_transcript():
     result = await content_generator.generate_all("")
     assert result == {"summary": "", "qa_pairs": [], "flashcards": [], "action_items": []}
+
+
+# ---------------------------------------------------------------------------
+# starred field behaviour
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_generate_qa_pairs_starred_defaults_to_false(monkeypatch):
+    """Items missing the 'starred' field should default to False."""
+    json_without_starred = json.dumps([
+        {"question": "What is gravity?", "answer": "A fundamental force."},
+    ])
+    mock_client = _make_mock_client(json_without_starred)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+        result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
+
+    assert len(result) == 1
+    assert result[0]["starred"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_qa_pairs_starred_true_when_set(monkeypatch):
+    """Items with starred=true should have starred=True in the result."""
+    json_with_starred = json.dumps([
+        {"question": "This is on the exam?", "answer": "Yes.", "starred": True},
+        {"question": "Normal question?", "answer": "Normal answer.", "starred": False},
+    ])
+    mock_client = _make_mock_client(json_with_starred)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+        result = await content_generator.generate_qa_pairs(SAMPLE_TRANSCRIPT)
+
+    assert result[0]["starred"] is True
+    assert result[1]["starred"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_flashcards_starred_defaults_to_false(monkeypatch):
+    """Flashcard items missing the 'starred' field should default to False."""
+    json_without_starred = json.dumps([
+        {"concept": "Entropy", "definition": "Measure of disorder."},
+    ])
+    mock_client = _make_mock_client(json_without_starred)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+        result = await content_generator.generate_flashcards(SAMPLE_TRANSCRIPT)
+
+    assert len(result) == 1
+    assert result[0]["starred"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_flashcards_starred_true_when_set(monkeypatch):
+    """Flashcard items with starred=true should have starred=True in the result."""
+    json_with_starred = json.dumps([
+        {"concept": "Key theorem", "definition": "Pay attention to this.", "starred": True},
+        {"concept": "Other concept", "definition": "Less critical.", "starred": False},
+    ])
+    mock_client = _make_mock_client(json_with_starred)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+        result = await content_generator.generate_flashcards(SAMPLE_TRANSCRIPT)
+
+    assert result[0]["starred"] is True
+    assert result[1]["starred"] is False

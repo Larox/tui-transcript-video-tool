@@ -62,22 +62,25 @@ class StudyStore:
         """Replace all Q&A pairs for *video_id* with *pairs*.
 
         Each dict in *pairs* must have ``question`` and ``answer`` keys.
+        The optional ``starred`` key (bool) flags teacher-emphasized items.
         """
         self._db._conn.execute(
             "DELETE FROM qa_pairs WHERE video_id = ?", (video_id,)
         )
         for sort_order, pair in enumerate(pairs):
+            starred = int(bool(pair.get("starred", False)))
             self._db._conn.execute(
-                "INSERT INTO qa_pairs (video_id, question, answer, sort_order, user_id) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (video_id, pair["question"], pair["answer"], sort_order, user_id),
+                "INSERT INTO qa_pairs "
+                "(video_id, question, answer, sort_order, starred, user_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (video_id, pair["question"], pair["answer"], sort_order, starred, user_id),
             )
         self._db._conn.commit()
 
     def get_qa_pairs(self, video_id: int) -> list[dict]:
         """Return all Q&A pairs for *video_id* ordered by sort_order."""
         rows = self._db._conn.execute(
-            "SELECT id, video_id, question, answer, sort_order, user_id "
+            "SELECT id, video_id, question, answer, sort_order, starred, user_id "
             "FROM qa_pairs WHERE video_id = ? ORDER BY sort_order",
             (video_id,),
         ).fetchall()
@@ -88,7 +91,8 @@ class StudyStore:
                 "question": r[2],
                 "answer": r[3],
                 "sort_order": r[4],
-                "user_id": r[5],
+                "starred": bool(r[5]),
+                "user_id": r[6],
             }
             for r in rows
         ]
@@ -107,22 +111,25 @@ class StudyStore:
         """Replace all flashcards for *video_id* with *cards*.
 
         Each dict in *cards* must have ``concept`` and ``definition`` keys.
+        The optional ``starred`` key (bool) flags teacher-emphasized items.
         """
         self._db._conn.execute(
             "DELETE FROM flashcards WHERE video_id = ?", (video_id,)
         )
         for sort_order, card in enumerate(cards):
+            starred = int(bool(card.get("starred", False)))
             self._db._conn.execute(
-                "INSERT INTO flashcards (video_id, concept, definition, sort_order, user_id) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (video_id, card["concept"], card["definition"], sort_order, user_id),
+                "INSERT INTO flashcards "
+                "(video_id, concept, definition, sort_order, starred, user_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (video_id, card["concept"], card["definition"], sort_order, starred, user_id),
             )
         self._db._conn.commit()
 
     def get_flashcards(self, video_id: int) -> list[dict]:
         """Return all flashcards for *video_id* ordered by sort_order."""
         rows = self._db._conn.execute(
-            "SELECT id, video_id, concept, definition, sort_order, user_id "
+            "SELECT id, video_id, concept, definition, sort_order, starred, user_id "
             "FROM flashcards WHERE video_id = ? ORDER BY sort_order",
             (video_id,),
         ).fetchall()
@@ -133,7 +140,8 @@ class StudyStore:
                 "concept": r[2],
                 "definition": r[3],
                 "sort_order": r[4],
-                "user_id": r[5],
+                "starred": bool(r[5]),
+                "user_id": r[6],
             }
             for r in rows
         ]

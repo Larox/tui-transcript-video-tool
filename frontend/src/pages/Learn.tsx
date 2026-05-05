@@ -24,6 +24,7 @@ interface FlashcardItem {
   definition: string;
   courseName: string;
   className: string;
+  starred: boolean;
 }
 
 interface QuizItem {
@@ -34,6 +35,7 @@ interface QuizItem {
   options: string[];
   courseName: string;
   className: string;
+  starred: boolean;
 }
 
 type DeckCard = FlashcardItem | QuizItem;
@@ -76,6 +78,7 @@ function buildDeck(
       definition: fc.definition,
       courseName,
       className,
+      starred: fc.starred ?? false,
     });
   }
 
@@ -99,6 +102,7 @@ function buildDeck(
         definition: pair.answer,
         courseName,
         className,
+        starred: pair.starred ?? false,
       });
       continue;
     }
@@ -114,10 +118,14 @@ function buildDeck(
       options,
       courseName,
       className,
+      starred: pair.starred ?? false,
     });
   }
 
-  return cards;
+  // Sort: starred cards first (each group shuffled separately)
+  const starredCards = cards.filter((c) => c.starred);
+  const regularCards = cards.filter((c) => !c.starred);
+  return [...shuffle(starredCards), ...shuffle(regularCards)];
 }
 
 // ------------------------------------------------------------------
@@ -220,6 +228,9 @@ function FlashcardCard({
             <BookOpen className="size-4 text-primary shrink-0" />
             <span className="text-xs font-medium text-primary truncate">{card.courseName}</span>
             <span className="text-xs text-muted-foreground truncate">· {card.className}</span>
+            {card.starred && (
+              <span className="ml-auto text-sm" title="Importante para el examen">⭐</span>
+            )}
           </div>
 
           {/* Content */}
@@ -323,6 +334,9 @@ function QuizCard({
             <Brain className="size-4 text-primary shrink-0" />
             <span className="text-xs font-medium text-primary truncate">{card.courseName}</span>
             <span className="text-xs text-muted-foreground truncate">· {card.className}</span>
+            {card.starred && (
+              <span className="ml-auto text-sm" title="Importante para el examen">⭐</span>
+            )}
           </div>
 
           {/* Question */}
@@ -546,7 +560,10 @@ export function Learn() {
       allCards.push(...cards);
     }
 
-    setDeck(shuffle(allCards));
+    // Starred cards across all classes come first, each group shuffled separately
+    const starredAll = allCards.filter((c) => c.starred);
+    const regularAll = allCards.filter((c) => !c.starred);
+    setDeck([...shuffle(starredAll), ...shuffle(regularAll)]);
     setCurrentIndex(0);
     setFlashcardsReviewed(0);
     setQuizCorrect(0);

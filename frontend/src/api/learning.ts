@@ -82,6 +82,7 @@ export interface SummaryResponse {
 export interface QAPair {
   question: string;
   answer: string;
+  starred: boolean;
 }
 
 export interface QAResponse {
@@ -91,6 +92,7 @@ export interface QAResponse {
 export interface Flashcard {
   concept: string;
   definition: string;
+  starred: boolean;
 }
 
 export interface FlashcardsResponse {
