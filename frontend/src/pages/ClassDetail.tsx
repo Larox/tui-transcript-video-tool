@@ -11,6 +11,7 @@ import {
   PenLine,
   RotateCcw,
   Sparkles,
+  ToggleLeft,
   Zap,
 } from 'lucide-react';
 import {
@@ -19,6 +20,7 @@ import {
   getFlashcards,
   getActionItems,
   getFillInBlank,
+  getTrueFalse,
   dismissActionItem,
   startGeneration,
   type Urgency,
@@ -26,6 +28,7 @@ import {
   type QAPair,
   type Flashcard,
   type FillInBlankItem,
+  type TrueFalseItem,
 } from '@/api/learning';
 import { getVideoById } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +39,7 @@ import { Card, CardContent } from '@/components/ui/card';
 // Helpers
 // ------------------------------------------------------------------
 
-const GENERATION_STEPS = ['summary', 'qa', 'flashcards', 'action_items', 'fill_in_blank'] as const;
+const GENERATION_STEPS = ['summary', 'qa', 'flashcards', 'action_items', 'fill_in_blank', 'true_false'] as const;
 type GenStep = (typeof GENERATION_STEPS)[number];
 
 const STEP_LABELS: Record<GenStep, string> = {
@@ -45,6 +48,7 @@ const STEP_LABELS: Record<GenStep, string> = {
   flashcards: 'Flashcards',
   action_items: 'Tareas',
   fill_in_blank: 'Completar',
+  true_false: 'Verdadero/Falso',
 };
 
 function urgencyBadge(urgency: Urgency) {
@@ -425,11 +429,72 @@ function FillInBlankSection({ videoId }: { videoId: number }) {
   );
 }
 
+function TrueFalseSection({ videoId }: { videoId: number }) {
+  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['true-false', videoId],
+    queryFn: () => getTrueFalse(videoId),
+    retry: false,
+  });
+
+  if (isLoading) return <div className="flex justify-center py-4"><Loader2 className="size-4 animate-spin text-muted-foreground" /></div>;
+  if (error || !data?.items.length)
+    return <p className="text-sm text-muted-foreground italic">Sin ejercicios de verdadero/falso todavía.</p>;
+
+  const toggle = (i: number) => {
+    setRevealed((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      {data.items.map((item: TrueFalseItem, i: number) => (
+        <Card key={i} className="py-0">
+          <CardContent className="px-4 py-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{item.statement}</p>
+                {revealed.has(i) && (
+                  <div className="mt-2 space-y-1">
+                    <p className={`text-sm font-semibold ${item.is_true ? 'text-green-700' : 'text-red-700'}`}>
+                      {item.is_true ? 'Verdadero ✓' : 'Falso ✗'}
+                    </p>
+                    {item.explanation && (
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {item.explanation}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              {item.starred && (
+                <span className="text-sm shrink-0" title="Importante para el examen">⭐</span>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toggle(i)}
+              className="text-xs"
+            >
+              {revealed.has(i) ? 'Ocultar respuesta' : 'Ver respuesta'}
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------
 // Main page
 // ------------------------------------------------------------------
 
-type Tab = 'resumen' | 'qa' | 'flashcards' | 'tareas' | 'completar';
+type Tab = 'resumen' | 'qa' | 'flashcards' | 'tareas' | 'completar' | 'verdadero-falso';
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: 'resumen', label: 'Resumen', icon: BookOpen },
@@ -437,6 +502,7 @@ const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: 'flashcards', label: 'Flashcards', icon: RotateCcw },
   { id: 'tareas', label: 'Tareas', icon: CheckCircle2 },
   { id: 'completar', label: 'Completar', icon: PenLine },
+  { id: 'verdadero-falso', label: 'Verdadero/Falso', icon: ToggleLeft },
 ];
 
 export function ClassDetail() {
@@ -457,6 +523,7 @@ export function ClassDetail() {
     queryClient.invalidateQueries({ queryKey: ['flashcards', id] });
     queryClient.invalidateQueries({ queryKey: ['action-items', id] });
     queryClient.invalidateQueries({ queryKey: ['fill-in-blank', id] });
+    queryClient.invalidateQueries({ queryKey: ['true-false', id] });
   }, [queryClient, id]);
 
   if (videoLoading) {
@@ -528,6 +595,7 @@ export function ClassDetail() {
           {activeTab === 'flashcards' && <FlashcardsSection videoId={id} />}
           {activeTab === 'tareas' && <ActionItemsSection videoId={id} />}
           {activeTab === 'completar' && <FillInBlankSection videoId={id} />}
+          {activeTab === 'verdadero-falso' && <TrueFalseSection videoId={id} />}
         </div>
       </div>
     </div>

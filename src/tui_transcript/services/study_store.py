@@ -204,6 +204,64 @@ class StudyStore:
         ]
 
     # ------------------------------------------------------------------
+    # True/False statements
+    # ------------------------------------------------------------------
+
+    def save_true_false(
+        self,
+        video_id: int,
+        items: list[dict],
+        user_id: str | None = None,
+    ) -> None:
+        """Replace all true/false statements for *video_id* with *items*.
+
+        Each dict in *items* must have ``statement`` and ``is_true`` keys.
+        The optional ``explanation`` key (str) explains why it's true or false.
+        The optional ``starred`` key (bool) flags teacher-emphasized items.
+        """
+        self._db._conn.execute(
+            "DELETE FROM true_false_statements WHERE video_id = ?", (video_id,)
+        )
+        for sort_order, item in enumerate(items):
+            starred = int(bool(item.get("starred", False)))
+            is_true = int(bool(item.get("is_true", True)))
+            self._db._conn.execute(
+                "INSERT INTO true_false_statements "
+                "(video_id, statement, is_true, explanation, sort_order, starred, user_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    video_id,
+                    item["statement"],
+                    is_true,
+                    item.get("explanation", ""),
+                    sort_order,
+                    starred,
+                    user_id,
+                ),
+            )
+        self._db._conn.commit()
+
+    def get_true_false(self, video_id: int) -> list[dict]:
+        """Return all true/false statements for *video_id* ordered by sort_order."""
+        rows = self._db._conn.execute(
+            "SELECT id, video_id, statement, is_true, explanation, sort_order, starred "
+            "FROM true_false_statements WHERE video_id = ? ORDER BY sort_order",
+            (video_id,),
+        ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "video_id": r[1],
+                "statement": r[2],
+                "is_true": bool(r[3]),
+                "explanation": r[4],
+                "sort_order": r[5],
+                "starred": bool(r[6]),
+            }
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
     # Action items
     # ------------------------------------------------------------------
 
