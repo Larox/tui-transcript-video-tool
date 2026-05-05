@@ -205,7 +205,7 @@ export function Upload() {
         fileId: uploaded.id,
         language,
         engine,
-        collectionId: courseId ? Number(courseId) : undefined,
+        collectionId: courseId && courseId !== 'none' ? Number(courseId) : undefined,
         className: className.trim(),
       });
 
@@ -253,7 +253,7 @@ export function Upload() {
         navigate(`/classes/${resolvedVideoId}`);
       } else {
         // Fall back to courses
-        navigate(courseId ? `/courses/${courseId}` : '/courses');
+        navigate(courseId && courseId !== 'none' ? `/courses/${courseId}` : '/courses');
       }
     } catch (e) {
       setProgress((p) => ({
@@ -343,7 +343,7 @@ export function Upload() {
                     <SelectValue placeholder="Sin materia" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sin materia</SelectItem>
+                    <SelectItem value="none">Sin materia</SelectItem>
                     {collections.map((c: CollectionEntry) => (
                       <SelectItem key={c.id} value={String(c.id)}>
                         {c.name}
