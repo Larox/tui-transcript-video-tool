@@ -166,6 +166,24 @@ CREATE TABLE IF NOT EXISTS activity_log (
 
 CREATE UNIQUE INDEX IF NOT EXISTS activity_log_date_type_user
     ON activity_log (log_date, activity_type, COALESCE(user_id, ''));
+
+CREATE TABLE IF NOT EXISTS card_reviews (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id       TEXT    NOT NULL,
+    card_type     TEXT    NOT NULL,
+    video_id      INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    ease_factor   REAL    NOT NULL DEFAULT 2.5,
+    interval      INTEGER NOT NULL DEFAULT 1,
+    repetitions   INTEGER NOT NULL DEFAULT 0,
+    next_review   TEXT    NOT NULL,
+    last_reviewed TEXT,
+    user_id       TEXT,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS card_reviews_card_id_user
+    ON card_reviews (card_id, card_type, COALESCE(user_id, ''));
 """
 
 _FTS_SCHEMA = """\
@@ -285,6 +303,28 @@ class HistoryDB:
                     FROM study_sessions
                     """
                 )
+        # Add card_reviews table if missing (idempotent)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS card_reviews (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                card_id       TEXT    NOT NULL,
+                card_type     TEXT    NOT NULL,
+                video_id      INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+                ease_factor   REAL    NOT NULL DEFAULT 2.5,
+                interval      INTEGER NOT NULL DEFAULT 1,
+                repetitions   INTEGER NOT NULL DEFAULT 0,
+                next_review   TEXT    NOT NULL,
+                last_reviewed TEXT,
+                user_id       TEXT,
+                created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+                updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        # Create unique index if missing
+        self._conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS card_reviews_card_id_user
+                ON card_reviews (card_id, card_type, COALESCE(user_id, ''))
+        """)
         self._conn.commit()
 
     # ------------------------------------------------------------------
