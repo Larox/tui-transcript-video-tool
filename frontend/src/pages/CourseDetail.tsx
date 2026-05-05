@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Loader2, Plus, Video } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, Loader2, Plus, Sparkles, Video, XCircle } from 'lucide-react';
 import { getCollection, type CollectionItemEntry } from '@/api/client';
+import { startGeneration } from '@/api/learning';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useState } from 'react';
 
 function statusBadge(item: CollectionItemEntry) {
   if (item.output_path) {
@@ -60,9 +62,13 @@ function ClassCard({
   );
 }
 
+type GenStatus = 'pending' | 'running' | 'done' | 'error';
+interface ClassGenState { id: number; name: string; status: GenStatus }
+
 export function CourseDetail() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  const [genStates, setGenStates] = useState<ClassGenState[] | null>(null);
 
   const id = Number(courseId);
 
@@ -97,6 +103,34 @@ export function CourseDetail() {
     );
   }
 
+  const handleGenerateAll = async () => {
+    if (!collection || collection.items.length === 0) return;
+    const items = collection.items;
+    const initial = items.map((item) => ({ id: item.id, name: item.output_title, status: 'pending' as GenStatus }));
+    setGenStates(initial);
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      setGenStates((prev) => prev!.map((s) => s.id === item.id ? { ...s, status: 'running' } : s));
+      await new Promise<void>((resolve) => {
+        const cancel = startGeneration(
+          item.id,
+          (event) => {
+            if (event.type === 'complete') {
+              setGenStates((prev) => prev!.map((s) => s.id === item.id ? { ...s, status: 'done' } : s));
+              cancel();
+              resolve();
+            }
+          },
+          () => {
+            setGenStates((prev) => prev!.map((s) => s.id === item.id ? { ...s, status: 'error' } : s));
+            resolve();
+          }
+        );
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -122,15 +156,49 @@ export function CourseDetail() {
               )}
             </div>
           </div>
-          <Button
-            onClick={() => navigate(`/upload?courseId=${id}`)}
-            className="shrink-0"
-          >
-            <Plus className="size-4 mr-2" />
-            Subir Clase
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {collection.items.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={handleGenerateAll}
+                disabled={genStates !== null && genStates.some((s) => s.status === 'running')}
+              >
+                <Sparkles className="size-4 mr-2" />
+                Generar Todo
+              </Button>
+            )}
+            <Button onClick={() => navigate(`/upload?courseId=${id}`)}>
+              <Plus className="size-4 mr-2" />
+              Subir Clase
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Batch generation progress */}
+      {genStates && (
+        <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm font-medium">Generando material de estudio</p>
+            {genStates.every((s) => s.status === 'done' || s.status === 'error') && (
+              <button type="button" onClick={() => setGenStates(null)} className="text-xs text-muted-foreground hover:text-foreground">
+                Cerrar
+              </button>
+            )}
+          </div>
+          {genStates.map((s) => (
+            <div key={s.id} className="flex items-center gap-2 text-sm">
+              {s.status === 'done' && <CheckCircle2 className="size-4 text-green-500 shrink-0" />}
+              {s.status === 'running' && <Loader2 className="size-4 animate-spin text-primary shrink-0" />}
+              {s.status === 'error' && <XCircle className="size-4 text-destructive shrink-0" />}
+              {s.status === 'pending' && <div className="size-4 rounded-full border-2 border-muted shrink-0" />}
+              <span className={s.status === 'done' ? 'text-muted-foreground line-through' : s.status === 'running' ? 'font-medium' : 'text-muted-foreground'}>
+                {s.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Class list */}
       {collection.items.length === 0 ? (
