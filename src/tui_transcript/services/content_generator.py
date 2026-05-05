@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 
 _MODEL = "claude-sonnet-4-6"
 
+
+def _parse_json(raw: str) -> object:
+    """Parse JSON from a Claude response, stripping markdown code fences if present."""
+    text = raw.strip()
+    if text.startswith("```"):
+        # Drop the opening fence line and any closing fence
+        lines = text.splitlines()
+        lines = lines[1:]  # remove ```json or ```
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return json.loads(text)
+
 _SUMMARY_SYSTEM = (
     "You are an expert academic assistant. Given a class or lecture transcript, "
     "write a clear executive summary of 200-400 words covering the main topics, "
@@ -152,7 +165,7 @@ async def generate_qa_pairs(transcript: str) -> list[dict]:
             messages=[{"role": "user", "content": transcript}],
         )
         raw = msg.content[0].text.strip()
-        data = json.loads(raw)
+        data = _parse_json(raw)
         return [
             {
                 "question": item["question"],
@@ -193,7 +206,7 @@ async def generate_flashcards(transcript: str) -> list[dict]:
             messages=[{"role": "user", "content": transcript}],
         )
         raw = msg.content[0].text.strip()
-        data = json.loads(raw)
+        data = _parse_json(raw)
         return [
             {
                 "concept": item["concept"],
@@ -234,7 +247,7 @@ async def generate_action_items(transcript: str) -> list[dict]:
             messages=[{"role": "user", "content": transcript}],
         )
         raw = msg.content[0].text.strip()
-        data = json.loads(raw)
+        data = _parse_json(raw)
         return [
             {
                 "text": item["text"],
@@ -275,7 +288,7 @@ async def generate_fill_in_blank(transcript: str) -> list[dict]:
             messages=[{"role": "user", "content": transcript}],
         )
         raw = msg.content[0].text.strip()
-        data = json.loads(raw)
+        data = _parse_json(raw)
         return [
             {
                 "sentence": item["sentence"],
@@ -317,7 +330,7 @@ async def generate_true_false(transcript: str) -> list[dict]:
             messages=[{"role": "user", "content": transcript}],
         )
         raw = msg.content[0].text.strip()
-        data = json.loads(raw)
+        data = _parse_json(raw)
         return [
             {
                 "statement": item["statement"],
@@ -359,7 +372,7 @@ async def generate_error_detection(transcript: str) -> list[dict]:
             messages=[{"role": "user", "content": transcript}],
         )
         raw = msg.content[0].text.strip()
-        data = json.loads(raw)
+        data = _parse_json(raw)
         return [
             {
                 "statement": item["statement"],
