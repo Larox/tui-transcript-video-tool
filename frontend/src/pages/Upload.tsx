@@ -1,8 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
-import { useState, useRef, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Loader2, Upload as UploadIcon } from 'lucide-react';
-import { getCollections, type CollectionEntry } from '@/api/client';
+import { ArrowLeft, CheckCircle2, Loader2, Plus, Upload as UploadIcon } from 'lucide-react';
+import { getCollections, createCollection, type CollectionEntry } from '@/api/client';
 import {
   uploadFile,
   startLearningTranscription,
@@ -14,13 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 // ------------------------------------------------------------------
 // Types
@@ -115,6 +108,112 @@ function FilePicker({
 // ------------------------------------------------------------------
 // Progress display
 // ------------------------------------------------------------------
+// Course combobox with search + create
+// ------------------------------------------------------------------
+
+function CourseCombobox({
+  collections,
+  value,
+  onChange,
+}: {
+  collections: CollectionEntry[];
+  value: string;
+  onChange: (id: string, newCollection?: CollectionEntry) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [creating, setCreating] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selected = value && value !== 'none'
+    ? collections.find((c) => String(c.id) === value)
+    : null;
+
+  const filtered = query.trim()
+    ? collections.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
+    : collections;
+
+  const exactMatch = collections.some(
+    (c) => c.name.toLowerCase() === query.toLowerCase().trim()
+  );
+
+  const handleCreate = async () => {
+    const name = query.trim();
+    if (!name) return;
+    setCreating(true);
+    try {
+      const created = await createCollection({ name, collection_type: 'course' });
+      onChange(String(created.id), created);
+      setOpen(false);
+      setQuery('');
+    } catch {
+      // ignore
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const itemClass =
+    'w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer truncate';
+
+  return (
+    <div ref={ref} className="relative">
+      <Input
+        value={open ? query : (selected?.name ?? '')}
+        placeholder="Buscar o crear materia..."
+        onFocus={() => { setOpen(true); setQuery(''); }}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false);
+          if (e.key === 'Enter' && query.trim() && !exactMatch) handleCreate();
+        }}
+      />
+      {open && (
+        <div className="absolute z-50 w-full mt-1 rounded-md border bg-popover text-popover-foreground shadow-md max-h-52 overflow-auto">
+          <button type="button" className={itemClass} onClick={() => { onChange('none'); setOpen(false); setQuery(''); }}>
+            Sin materia
+          </button>
+          {filtered.map((c) => (
+            <button
+              type="button"
+              key={c.id}
+              className={`${itemClass}${String(c.id) === value ? ' font-medium text-primary' : ''}`}
+              onClick={() => { onChange(String(c.id)); setOpen(false); setQuery(''); }}
+            >
+              {c.name}
+            </button>
+          ))}
+          {query.trim() && !exactMatch && (
+            <button
+              type="button"
+              className={`${itemClass} text-primary flex items-center gap-1.5`}
+              onClick={handleCreate}
+              disabled={creating}
+            >
+              {creating
+                ? <Loader2 className="size-3.5 animate-spin" />
+                : <Plus className="size-3.5" />}
+              Crear "{query.trim()}"
+            </button>
+          )}
+          {filtered.length === 0 && !query.trim() && (
+            <p className="px-3 py-2 text-xs text-muted-foreground">No hay materias. Escribe para crear una.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------
 
 type ProgressStep = {
   key: string;
@@ -160,13 +259,18 @@ function ProgressView({ progress }: { progress: ProgressState }) {
 
 export function Upload() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const preselectedCourseId = searchParams.get('courseId');
 
-  const { data: collections = [] } = useQuery({
+  const { data: fetchedCollections = [] } = useQuery({
     queryKey: ['collections'],
     queryFn: getCollections,
   });
+  const [extraCollections, setExtraCollections] = useState<CollectionEntry[]>([]);
+  const collections = [...fetchedCollections, ...extraCollections.filter(
+    (e) => !fetchedCollections.some((f) => f.id === e.id)
+  )];
 
   const [step, setStep] = useState<Step>('file');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -338,19 +442,17 @@ export function Upload() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="course-select">Materia (opcional)</Label>
-                <Select value={courseId} onValueChange={setCourseId}>
-                  <SelectTrigger id="course-select">
-                    <SelectValue placeholder="Sin materia" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin materia</SelectItem>
-                    {collections.map((c: CollectionEntry) => (
-                      <SelectItem key={c.id} value={String(c.id)}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CourseCombobox
+                  collections={collections}
+                  value={courseId}
+                  onChange={(id, newCollection) => {
+                    setCourseId(id);
+                    if (newCollection) {
+                      setExtraCollections((prev) => [...prev, newCollection]);
+                      queryClient.invalidateQueries({ queryKey: ['collections'] });
+                    }
+                  }}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
