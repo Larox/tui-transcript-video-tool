@@ -10,7 +10,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Brain, ArrowLeft, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
 import { getCollections, getCollection, type CollectionEntry, type CollectionItemEntry } from '@/api/client';
-import { getFlashcards, getQA, getFillInBlank, getTrueFalse, getErrorDetection, logActivity, type Flashcard, type QAPair, type FillInBlankItem as ApiFillInBlankItem, type TrueFalseItem as ApiTrueFalseItem, type ErrorDetectionItem as ApiErrorDetectionItem } from '@/api/learning';
+import { getFlashcards, getQA, getFillInBlank, getTrueFalse, getErrorDetection, logActivity, rateCard, type Flashcard, type QAPair, type FillInBlankItem as ApiFillInBlankItem, type TrueFalseItem as ApiTrueFalseItem, type ErrorDetectionItem as ApiErrorDetectionItem } from '@/api/learning';
 import { Button } from '@/components/ui/button';
 
 // ------------------------------------------------------------------
@@ -116,7 +116,8 @@ function buildDeck(
       courseName,
       className,
       starred: fc.starred ?? false,
-    });
+      video_id: item.id,
+    } as any);
   }
 
   // QuizCards — need at least 2 distractors from other Q&A answers
@@ -140,7 +141,8 @@ function buildDeck(
         courseName,
         className,
         starred: pair.starred ?? false,
-      });
+        video_id: item.id,
+      } as any);
       continue;
     }
 
@@ -156,7 +158,8 @@ function buildDeck(
       courseName,
       className,
       starred: pair.starred ?? false,
-    });
+      video_id: item.id,
+    } as any);
   }
 
   // FillInBlankCards
@@ -171,7 +174,8 @@ function buildDeck(
       courseName,
       className,
       starred: fib.starred ?? false,
-    });
+      video_id: item.id,
+    } as any);
   }
 
   // TrueFalseCards
@@ -186,7 +190,8 @@ function buildDeck(
       courseName,
       className,
       starred: tf.starred ?? false,
-    });
+      video_id: item.id,
+    } as any);
   }
 
   // ErrorDetectionCards
@@ -202,7 +207,8 @@ function buildDeck(
       courseName,
       className,
       starred: ed.starred ?? false,
-    });
+      video_id: item.id,
+    } as any);
   }
 
   // Sort: starred cards first (each group shuffled separately)
@@ -233,6 +239,7 @@ function FlashcardCard({
   const [revealed, setRevealed] = useState(false);
   const [swipe, setSwipe] = useState<SwipeState>({ dragging: false, startX: 0, deltaX: 0 });
   const [exiting, setExiting] = useState<'left' | 'right' | null>(null);
+  const [quality, setQuality] = useState(3);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -257,6 +264,8 @@ function FlashcardCard({
   };
 
   const triggerSwipe = (dir: 'left' | 'right') => {
+    const videoId = (card as any).video_id || 0;
+    rateCard(videoId, card.id, 'flashcard', quality).catch(console.error);
     setExiting(dir);
     setTimeout(() => {
       if (dir === 'left') onSwipeLeft();
@@ -336,25 +345,40 @@ function FlashcardCard({
           </div>
 
           {/* Footer actions */}
-          <div className="px-5 pb-5 flex items-center justify-between gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 border-orange-300 text-orange-600 hover:bg-orange-50"
-              onClick={(e) => { e.stopPropagation(); triggerSwipe('left'); }}
-            >
-              <XCircle className="size-4 mr-1.5" />
-              Repasar
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 border-green-300 text-green-600 hover:bg-green-50"
-              onClick={(e) => { e.stopPropagation(); triggerSwipe('right'); }}
-            >
-              <CheckCircle2 className="size-4 mr-1.5" />
-              Lo tengo
-            </Button>
+          <div className="px-5 pb-5 space-y-3">
+            <div className="flex gap-1 justify-center">
+              {[1, 2, 3, 4, 5].map((q) => (
+                <button
+                  key={q}
+                  onClick={(e) => { e.stopPropagation(); setQuality(q); }}
+                  className={`px-2 py-1 text-xs rounded border ${
+                    quality === q ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                  }`}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 border-orange-300 text-orange-600 hover:bg-orange-50"
+                onClick={(e) => { e.stopPropagation(); triggerSwipe('left'); }}
+              >
+                <XCircle className="size-4 mr-1.5" />
+                Repasar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 border-green-300 text-green-600 hover:bg-green-50"
+                onClick={(e) => { e.stopPropagation(); triggerSwipe('right'); }}
+              >
+                <CheckCircle2 className="size-4 mr-1.5" />
+                Lo tengo
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -391,12 +415,17 @@ function QuizCard({
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [answered, setAnswered] = useState(false);
+  const [quality, setQuality] = useState(3);
 
   const handleSelect = (option: string) => {
     if (answered) return;
     setSelected(option);
     setAnswered(true);
     const correct = option === card.correctAnswer;
+    const videoId = (card as any).video_id || 0;
+    // Use quality if explicitly set, otherwise default based on correctness
+    const finalQuality = quality !== 3 || answered ? quality : (correct ? 4 : 2);
+    rateCard(videoId, card.id, 'quiz', finalQuality).catch(console.error);
     setTimeout(() => onAnswer(correct), 1200);
   };
 
@@ -446,16 +475,31 @@ function QuizCard({
 
           {/* Feedback */}
           {answered && (
-            <div className={`mx-5 mb-5 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 ${
-              selected === card.correctAnswer
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-700'
-            }`}>
-              {selected === card.correctAnswer ? (
-                <><CheckCircle2 className="size-4 shrink-0" /> Correcto</>
-              ) : (
-                <><XCircle className="size-4 shrink-0" /> Incorrecto</>
-              )}
+            <div className="px-5 pb-5 space-y-3">
+              <div className={`px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 ${
+                selected === card.correctAnswer
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-red-100 text-red-700'
+              }`}>
+                {selected === card.correctAnswer ? (
+                  <><CheckCircle2 className="size-4 shrink-0" /> Correcto</>
+                ) : (
+                  <><XCircle className="size-4 shrink-0" /> Incorrecto</>
+                )}
+              </div>
+              <div className="flex gap-1 justify-center">
+                {[1, 2, 3, 4, 5].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => setQuality(q)}
+                    className={`px-2 py-1 text-xs rounded border ${
+                      quality === q ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                    }`}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -475,6 +519,7 @@ function FillInBlankCard({
   const [checked, setChecked] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [exiting, setExiting] = useState<'left' | 'right' | null>(null);
+  const [quality, setQuality] = useState(3);
 
   const handleCheck = () => {
     if (checked) return;
@@ -490,6 +535,8 @@ function FillInBlankCard({
   };
 
   const handleNext = () => {
+    const videoId = (card as any).video_id || 0;
+    rateCard(videoId, card.id, 'fill_in_blank', quality).catch(console.error);
     triggerAdvance(correct);
   };
 
@@ -565,6 +612,19 @@ function FillInBlankCard({
                   <><XCircle className="size-4 shrink-0" /> Respuesta: {card.answer}</>
                 )}
               </div>
+              <div className="flex gap-1 justify-center mb-3">
+                {[1, 2, 3, 4, 5].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => setQuality(q)}
+                    className={`px-2 py-1 text-xs rounded border ${
+                      quality === q ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                    }`}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
               <Button onClick={handleNext} className="w-full">
                 Siguiente
               </Button>
@@ -585,6 +645,7 @@ function TrueFalseCard({
 }) {
   const [answered, setAnswered] = useState<boolean | null>(null); // null = not yet answered
   const [exiting, setExiting] = useState<'left' | 'right' | null>(null);
+  const [quality, setQuality] = useState(3);
 
   const handleAnswer = (userSaysTrue: boolean) => {
     if (answered !== null) return;
@@ -594,6 +655,8 @@ function TrueFalseCard({
 
   const handleNext = () => {
     const correct = answered ?? false;
+    const videoId = (card as any).video_id || 0;
+    rateCard(videoId, card.id, 'true_false', quality).catch(console.error);
     const dir = correct ? 'right' : 'left';
     setExiting(dir);
     setTimeout(() => onAnswer(correct), 300);
@@ -662,6 +725,19 @@ function TrueFalseCard({
               {card.explanation && (
                 <p className="text-xs text-muted-foreground leading-relaxed px-1">{card.explanation}</p>
               )}
+              <div className="flex gap-1 justify-center mb-3">
+                {[1, 2, 3, 4, 5].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => setQuality(q)}
+                    className={`px-2 py-1 text-xs rounded border ${
+                      quality === q ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                    }`}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
               <Button onClick={handleNext} className="w-full">
                 Siguiente
               </Button>
@@ -684,6 +760,7 @@ function ErrorDetectionCard({
   const [checked, setChecked] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [exiting, setExiting] = useState<'left' | 'right' | null>(null);
+  const [quality, setQuality] = useState(3);
 
   const handleCheck = () => {
     if (checked) return;
@@ -699,6 +776,8 @@ function ErrorDetectionCard({
   };
 
   const handleNext = () => {
+    const videoId = (card as any).video_id || 0;
+    rateCard(videoId, card.id, 'error_detection', quality).catch(console.error);
     triggerAdvance(correct);
   };
 
@@ -779,6 +858,19 @@ function ErrorDetectionCard({
               {card.explanation && (
                 <p className="text-xs text-muted-foreground leading-relaxed px-1">{card.explanation}</p>
               )}
+              <div className="flex gap-1 justify-center mb-3">
+                {[1, 2, 3, 4, 5].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => setQuality(q)}
+                    className={`px-2 py-1 text-xs rounded border ${
+                      quality === q ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                    }`}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
               <Button onClick={handleNext} className="w-full">
                 Siguiente
               </Button>
