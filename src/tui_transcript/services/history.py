@@ -184,6 +184,19 @@ CREATE TABLE IF NOT EXISTS card_reviews (
 
 CREATE UNIQUE INDEX IF NOT EXISTS card_reviews_card_id_user
     ON card_reviews (card_id, card_type, COALESCE(user_id, ''));
+
+CREATE TABLE IF NOT EXISTS card_review_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id     TEXT    NOT NULL,
+    card_type   TEXT    NOT NULL,
+    video_id    INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+    quality     INTEGER NOT NULL,
+    reviewed_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    user_id     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS card_review_events_video_date_idx
+    ON card_review_events (video_id, reviewed_at);
 """
 
 _FTS_SCHEMA = """\
@@ -324,6 +337,22 @@ class HistoryDB:
         self._conn.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS card_reviews_card_id_user
                 ON card_reviews (card_id, card_type, COALESCE(user_id, ''))
+        """)
+        # Add card_review_events table if missing (idempotent) — SEB-87 Boss Battle
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS card_review_events (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                card_id     TEXT    NOT NULL,
+                card_type   TEXT    NOT NULL,
+                video_id    INTEGER NOT NULL REFERENCES processed_videos(id) ON DELETE CASCADE,
+                quality     INTEGER NOT NULL,
+                reviewed_at TEXT    NOT NULL DEFAULT (datetime('now')),
+                user_id     TEXT
+            )
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS card_review_events_video_date_idx
+                ON card_review_events (video_id, reviewed_at)
         """)
         self._conn.commit()
 
@@ -846,6 +875,79 @@ class HistoryDB:
         if row is None:
             return None
         return row[0]
+
+    # ------------------------------------------------------------------
+    # Card review events (SEB-87 Boss Battle)
+    # ------------------------------------------------------------------
+
+    def log_card_review_event(
+        self,
+        *,
+        card_id: str,
+        card_type: str,
+        video_id: int,
+        quality: int,
+        user_id: str | None = None,
+    ) -> None:
+        """Append a per-review event used to compute weekly failure counts."""
+        self._conn.execute(
+            "INSERT INTO card_review_events "
+            "(card_id, card_type, video_id, quality, user_id) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (card_id, card_type, video_id, quality, user_id),
+        )
+        self._conn.commit()
+
+    def get_weekly_failures(
+        self,
+        video_id: int,
+        *,
+        user_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Return the most-failed cards for *video_id* in the current ISO week.
+
+        A failure is any rating with quality < 3 (Again/Hard). The week starts
+        on Monday and is reset every Monday automatically by the date filter.
+        """
+        from datetime import date, timedelta
+
+        today = date.today()
+        # ISO weekday: Monday=0 ... Sunday=6
+        monday = today - timedelta(days=today.weekday())
+        rows = self._conn.execute(
+            """
+            SELECT card_id, card_type, COUNT(*) AS fail_count, MAX(reviewed_at) AS last_at
+            FROM card_review_events
+            WHERE video_id = ?
+              AND quality < 3
+              AND date(reviewed_at) >= ?
+              AND COALESCE(user_id, '') = COALESCE(?, '')
+            GROUP BY card_id, card_type
+            ORDER BY fail_count DESC, last_at DESC
+            LIMIT ?
+            """,
+            (video_id, monday.isoformat(), user_id, limit),
+        ).fetchall()
+        return [
+            {
+                "card_id": r[0],
+                "card_type": r[1],
+                "fail_count": r[2],
+                "last_failed_at": r[3],
+            }
+            for r in rows
+        ]
+
+    def count_boss_battle_completions(self, *, user_id: str | None = None) -> int:
+        """Total boss battles completed by *user_id* (uses activity_log)."""
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(items_done), 0) FROM activity_log "
+            "WHERE activity_type = 'boss_battle' "
+            "AND COALESCE(user_id, '') = COALESCE(?, '')",
+            (user_id,),
+        ).fetchone()
+        return int(row[0] or 0)
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -460,6 +460,15 @@ class StudyStore:
         """
         review = self.get_or_create_card_review(card_id, card_type, video_id, user_id)
 
+        # Log this review event for weekly failure tracking (SEB-87 Boss Battle)
+        self._db.log_card_review_event(
+            card_id=card_id,
+            card_type=card_type,
+            video_id=video_id,
+            quality=quality,
+            user_id=user_id,
+        )
+
         ef = review["ease_factor"]
         interval = review["interval"]
         repetitions = review["repetitions"]
