@@ -19,6 +19,7 @@ from tui_transcript.api.routes import (
     documents,
     files,
     generation,
+    learning,
     models,
     paths,
     search,
@@ -86,6 +87,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
 app.include_router(generation.router, prefix="/api")
+app.include_router(learning.router, prefix="/api")
 app.include_router(models.router, prefix="/api")
 app.include_router(paths.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
