@@ -158,6 +158,52 @@ export async function dismissActionItem(videoId: number, itemId: number): Promis
 }
 
 // ------------------------------------------------------------------
+// Stats / streaks (SEB-81, SEB-90)
+// ------------------------------------------------------------------
+
+export interface DailySessionEntry {
+  date: string;
+  cards_reviewed: number;
+  quizzes_correct: number;
+  quizzes_total: number;
+}
+
+export interface StatsSummary {
+  current_streak: number;
+  longest_streak: number;
+  total_sessions: number;
+  total_cards_reviewed: number;
+  total_quizzes_correct: number;
+  total_quizzes_total: number;
+  sessions_last_30_days: DailySessionEntry[];
+  daily_goal: number;
+  today_cards: number;
+}
+
+export async function logStudySession(
+  cards: number,
+  correct: number,
+  total: number
+): Promise<void> {
+  // Fire-and-forget; ignore errors so a failed stat call never blocks the user
+  try {
+    await fetch(`${API_BASE}/stats/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cards_reviewed: cards, quizzes_correct: correct, quizzes_total: total }),
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+export async function getStatsSummary(): Promise<StatsSummary> {
+  const res = await fetch(`${API_BASE}/stats/summary`);
+  if (!res.ok) throw new Error('Failed to fetch stats summary');
+  return res.json();
+}
+
+// ------------------------------------------------------------------
 // Generation SSE
 // ------------------------------------------------------------------
 

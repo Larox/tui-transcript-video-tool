@@ -106,6 +106,19 @@ CREATE TABLE IF NOT EXISTS action_items (
     user_id        TEXT,
     created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS study_sessions (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_date     TEXT    NOT NULL,
+    cards_reviewed   INTEGER NOT NULL DEFAULT 0,
+    quizzes_correct  INTEGER NOT NULL DEFAULT 0,
+    quizzes_total    INTEGER NOT NULL DEFAULT 0,
+    user_id          TEXT,
+    created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS study_sessions_date_user
+    ON study_sessions (session_date, COALESCE(user_id, ''));
 """
 
 _FTS_SCHEMA = """\

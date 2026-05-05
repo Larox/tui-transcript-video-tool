@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Loader2 } from 'lucide-react';
-import { getDashboardAlerts, dismissAlert, type AlertEntry, type Urgency } from '@/api/learning';
+import { getDashboardAlerts, dismissAlert, getStatsSummary, type AlertEntry, type Urgency } from '@/api/learning';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -84,6 +84,53 @@ function AlertCard({
   );
 }
 
+function StreakWidget() {
+  const { data } = useQuery({
+    queryKey: ['stats-summary'],
+    queryFn: getStatsSummary,
+    staleTime: 60_000,
+  });
+
+  if (!data) return null;
+
+  const { current_streak, today_cards, daily_goal } = data;
+  const progress = Math.min(today_cards / daily_goal, 1);
+  const goalMet = today_cards >= daily_goal;
+
+  return (
+    <Card className="py-3">
+      <CardContent className="px-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-lg">🔥</span>
+            <span className="text-xl font-bold tabular-nums">{current_streak}</span>
+            <span className="text-xs text-muted-foreground">
+              {current_streak === 1 ? 'día' : 'días'}
+            </span>
+          </div>
+          <div className="flex-1 space-y-1">
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${progress * 100}%`,
+                  backgroundColor: goalMet ? '#16a34a' : '#f97316',
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {goalMet
+                ? '¡Meta completada!'
+                : `Te faltan ${daily_goal - today_cards} tarjetas hoy`}
+              {' '}·{' '}{today_cards}/{daily_goal}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Dashboard() {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
@@ -134,6 +181,8 @@ export function Dashboard() {
           Tareas y compromisos pendientes en todas tus materias
         </p>
       </div>
+
+      <StreakWidget />
 
       {isLoading && (
         <div className="flex items-center justify-center py-12">
