@@ -110,6 +110,8 @@ def health() -> dict:
 
 def run() -> None:
     """Run the API server."""
+    from dotenv import load_dotenv
+    load_dotenv()
     uvicorn.run(
         "tui_transcript.api.main:app",
         host="0.0.0.0",

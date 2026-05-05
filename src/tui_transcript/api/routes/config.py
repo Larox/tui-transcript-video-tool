@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, HTTPException
 
 from tui_transcript.models import NamingMode
@@ -52,4 +54,11 @@ def put_config(update: ConfigUpdate) -> dict:
         config.anthropic_api_key = update.anthropic_api_key
 
     store.save(config)
+
+    # Propagate keys into the running process so generators pick them up immediately.
+    if config.deepgram_api_key:
+        os.environ["DEEPGRAM_API_KEY"] = config.deepgram_api_key
+    if config.anthropic_api_key:
+        os.environ["ANTHROPIC_API_KEY"] = config.anthropic_api_key
+
     return {"ok": True}

@@ -8,7 +8,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Brain, ArrowLeft, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
+import { Brain, ArrowLeft, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Loader2, BookOpen, Skull } from 'lucide-react';
 import { getCollections, getCollection, type CollectionEntry, type CollectionItemEntry } from '@/api/client';
 import { getFlashcards, getQA, getFillInBlank, getTrueFalse, getErrorDetection, logActivity, rateCard, type Flashcard, type QAPair, type FillInBlankItem as ApiFillInBlankItem, type TrueFalseItem as ApiTrueFalseItem, type ErrorDetectionItem as ApiErrorDetectionItem } from '@/api/learning';
 import { Button } from '@/components/ui/button';
@@ -1228,6 +1228,13 @@ export function Learn() {
         <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
           {finished ? deck.length : currentIndex + 1}/{deck.length}
         </span>
+        <Link
+          to={courseId ? `/boss-battle?courseId=${courseId}` : '/boss-battle'}
+          className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-red-500/40 bg-red-50 text-red-600 text-[11px] font-bold uppercase tracking-wider hover:bg-red-100"
+          title="Boss Battle: enfrenta los conceptos más fallados de la semana"
+        >
+          <Skull className="size-3.5" /> Boss
+        </Link>
       </div>
 
       {/* Card area */}

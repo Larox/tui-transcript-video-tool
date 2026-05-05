@@ -143,6 +143,8 @@ def get_summary() -> StatsSummaryResponse:
         ).fetchone()
         today_items = today_row[0] if today_row else 0
 
+        boss_battles_completed = db.count_boss_battle_completions()
+
         return StatsSummaryResponse(
             current_streak=current_streak,
             longest_streak=longest_streak,
@@ -152,6 +154,7 @@ def get_summary() -> StatsSummaryResponse:
             sessions_last_30_days=last_30,
             daily_goal=DAILY_GOAL,
             today_items=today_items,
+            boss_battles_completed=boss_battles_completed,
         )
     finally:
         db.close()

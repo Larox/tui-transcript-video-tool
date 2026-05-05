@@ -466,6 +466,7 @@ class StatsSummaryResponse(BaseModel):
     sessions_last_30_days: list[DailySessionEntry]
     daily_goal: int
     today_items: int
+    boss_battles_completed: int = 0
 
 
 # ------------------------------------------------------------------
@@ -488,3 +489,25 @@ class RateCardRequest(BaseModel):
 
     card_type: str = Field(..., min_length=1)  # 'flashcard', 'quiz', 'fill_in_blank', etc.
     quality: int = Field(..., ge=1, le=5)  # 1-5 rating
+
+
+# ------------------------------------------------------------------
+# Boss Battle (SEB-87)
+# ------------------------------------------------------------------
+
+
+class WeeklyFailingCard(BaseModel):
+    """A card that the student got wrong this week."""
+
+    card_id: str
+    card_type: str
+    fail_count: int
+    last_failed_at: str | None = None
+
+
+class BossBattleResponse(BaseModel):
+    """Response for GET /classes/{video_id}/boss-battle."""
+
+    video_id: int
+    week_start: str  # ISO date of Monday (start of current week)
+    cards: list[WeeklyFailingCard]
