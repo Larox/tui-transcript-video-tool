@@ -1,0 +1,168 @@
+import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, BookOpen, Loader2, Plus, Video } from 'lucide-react';
+import { getCollection, type CollectionItemEntry } from '@/api/client';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+
+function statusBadge(item: CollectionItemEntry) {
+  if (item.output_path) {
+    return (
+      <Badge className="bg-green-100 text-green-700 border-green-200">
+        Transcrito
+      </Badge>
+    );
+  }
+  return (
+    <Badge className="bg-gray-100 text-gray-500 border-gray-200">
+      Pendiente
+    </Badge>
+  );
+}
+
+function ClassCard({
+  item,
+  index,
+  onClick,
+}: {
+  item: CollectionItemEntry;
+  index: number;
+  onClick: () => void;
+}) {
+  const date = new Date(item.processed_at).toLocaleDateString('es-MX', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+
+  return (
+    <Card
+      className="cursor-pointer hover:border-primary/60 hover:shadow-md transition-all py-0"
+      onClick={onClick}
+    >
+      <CardContent className="px-5 py-4 flex items-center gap-4">
+        <div className="size-8 rounded-full bg-muted flex items-center justify-center shrink-0 text-xs font-mono text-muted-foreground">
+          {index + 1}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{item.output_title}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+            {item.source_path.split('/').pop()}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {statusBadge(item)}
+          <span className="text-xs text-muted-foreground">{date}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function CourseDetail() {
+  const { courseId } = useParams<{ courseId: string }>();
+  const navigate = useNavigate();
+
+  const id = Number(courseId);
+
+  const { data: collection, isLoading, error } = useQuery({
+    queryKey: ['collection', id],
+    queryFn: () => getCollection(id),
+    enabled: !isNaN(id),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error || !collection) {
+    return (
+      <div className="space-y-4">
+        <Link
+          to="/courses"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Mis Materias
+        </Link>
+        <p className="text-sm text-destructive">
+          {error ? (error as Error).message : 'Materia no encontrada'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <Link
+          to="/courses"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-3"
+        >
+          <ArrowLeft className="size-4" />
+          Mis Materias
+        </Link>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <BookOpen className="size-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">{collection.name}</h1>
+              {collection.description && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {collection.description}
+                </p>
+              )}
+            </div>
+          </div>
+          <Button
+            onClick={() => navigate(`/upload?courseId=${id}`)}
+            className="shrink-0"
+          >
+            <Plus className="size-4 mr-2" />
+            Subir Clase
+          </Button>
+        </div>
+      </div>
+
+      {/* Class list */}
+      {collection.items.length === 0 ? (
+        <div className="rounded-lg border-2 border-dashed p-12 text-center">
+          <Video className="mx-auto size-10 text-muted-foreground/40 mb-3" />
+          <p className="text-muted-foreground font-medium">No hay clases todavía</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Sube tu primera clase para empezar a estudiar.
+          </p>
+          <Button
+            className="mt-4"
+            onClick={() => navigate(`/upload?courseId=${id}`)}
+          >
+            <Plus className="size-4 mr-2" />
+            Subir Clase
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            {collection.items.length} clase{collection.items.length !== 1 ? 's' : ''}
+          </p>
+          {collection.items.map((item, idx) => (
+            <ClassCard
+              key={item.id}
+              item={item}
+              index={idx}
+              onClick={() => navigate(`/classes/${item.id}`)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

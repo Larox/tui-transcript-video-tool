@@ -477,6 +477,15 @@ export async function getVideos(): Promise<VideoEntry[]> {
   return res.json();
 }
 
+export async function getVideoById(id: number): Promise<VideoEntry> {
+  const res = await fetch(`${API_BASE}/videos/${id}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'Failed to fetch video');
+  }
+  return res.json();
+}
+
 // ------------------------------------------------------------------
 // Local Whisper models
 // ------------------------------------------------------------------
