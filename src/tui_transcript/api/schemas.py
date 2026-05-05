@@ -383,3 +383,39 @@ class AlertsResponse(BaseModel):
     """Response for GET /dashboard/alerts."""
 
     alerts: list[AlertEntry]
+
+
+# ------------------------------------------------------------------
+# Study sessions / stats (SEB-81, SEB-90)
+# ------------------------------------------------------------------
+
+
+class LogSessionRequest(BaseModel):
+    """Payload for POST /stats/session."""
+
+    cards_reviewed: int = Field(0, ge=0)
+    quizzes_correct: int = Field(0, ge=0)
+    quizzes_total: int = Field(0, ge=0)
+
+
+class DailySessionEntry(BaseModel):
+    """A single day's session data in the summary."""
+
+    date: str
+    cards_reviewed: int
+    quizzes_correct: int
+    quizzes_total: int
+
+
+class StatsSummaryResponse(BaseModel):
+    """Response for GET /stats/summary."""
+
+    current_streak: int
+    longest_streak: int
+    total_sessions: int
+    total_cards_reviewed: int
+    total_quizzes_correct: int
+    total_quizzes_total: int
+    sessions_last_30_days: list[DailySessionEntry]
+    daily_goal: int
+    today_cards: int

@@ -10,7 +10,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Brain, ArrowLeft, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
 import { getCollections, getCollection, type CollectionEntry, type CollectionItemEntry } from '@/api/client';
-import { getFlashcards, getQA, type Flashcard, type QAPair } from '@/api/learning';
+import { getFlashcards, getQA, logStudySession, type Flashcard, type QAPair } from '@/api/learning';
 import { Button } from '@/components/ui/button';
 
 // ------------------------------------------------------------------
@@ -570,6 +570,12 @@ export function Learn() {
     setQuizTotal(0);
     setFinished(false);
   }, [contentQuery.data]);
+
+  // Log the session when it finishes (fire-and-forget)
+  useEffect(() => {
+    if (!finished) return;
+    logStudySession(flashcardsReviewed, quizCorrect, quizTotal);
+  }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const advance = useCallback(() => {
     setCurrentIndex((prev) => {
