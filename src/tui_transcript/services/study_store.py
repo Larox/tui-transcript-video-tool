@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from tui_transcript.services.history import DB_PATH, HistoryDB
-
+from datetime import date, timedelta
 from pathlib import Path
+
+from tui_transcript.services.history import DB_PATH, HistoryDB
 
 
 class StudyStore:
@@ -386,6 +387,146 @@ class StudyStore:
             "UPDATE action_items SET dismissed = 1 WHERE id = ?", (item_id,)
         )
         self._db._conn.commit()
+
+    # ------------------------------------------------------------------
+    # Card reviews (SM-2 spaced repetition)
+    # ------------------------------------------------------------------
+
+    def get_or_create_card_review(
+        self, card_id: str, card_type: str, video_id: int, user_id: str | None = None
+    ) -> dict:
+        """Get existing card review or create new one if doesn't exist.
+
+        Returns a dict with keys:
+        {card_id, card_type, video_id, ease_factor, interval, repetitions, next_review, last_reviewed, user_id}
+        """
+        # Try to fetch existing
+        row = self._db._conn.execute(
+            "SELECT id, card_id, card_type, video_id, ease_factor, interval, repetitions, next_review, last_reviewed, user_id "
+            "FROM card_reviews WHERE card_id = ? AND card_type = ? AND video_id = ? AND COALESCE(user_id, '') = COALESCE(?, '')",
+            (card_id, card_type, video_id, user_id),
+        ).fetchone()
+
+        if row is not None:
+            return {
+                "id": row[0],
+                "card_id": row[1],
+                "card_type": row[2],
+                "video_id": row[3],
+                "ease_factor": row[4],
+                "interval": row[5],
+                "repetitions": row[6],
+                "next_review": row[7],
+                "last_reviewed": row[8],
+                "user_id": row[9],
+            }
+
+        # Create new review with SM-2 defaults
+        today_str = date.today().isoformat()
+        self._db._conn.execute(
+            "INSERT INTO card_reviews "
+            "(card_id, card_type, video_id, ease_factor, interval, repetitions, next_review, user_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (card_id, card_type, video_id, 2.5, 1, 0, today_str, user_id),
+        )
+        self._db._conn.commit()
+
+        # Return the newly created row
+        row = self._db._conn.execute(
+            "SELECT id, card_id, card_type, video_id, ease_factor, interval, repetitions, next_review, last_reviewed, user_id "
+            "FROM card_reviews WHERE card_id = ? AND card_type = ? AND video_id = ? AND COALESCE(user_id, '') = COALESCE(?, '')",
+            (card_id, card_type, video_id, user_id),
+        ).fetchone()
+        return {
+            "id": row[0],
+            "card_id": row[1],
+            "card_type": row[2],
+            "video_id": row[3],
+            "ease_factor": row[4],
+            "interval": row[5],
+            "repetitions": row[6],
+            "next_review": row[7],
+            "last_reviewed": row[8],
+            "user_id": row[9],
+        }
+
+    def update_card_review(
+        self, card_id: str, card_type: str, video_id: int, quality: int, user_id: str | None = None
+    ) -> dict:
+        """Apply SM-2 algorithm after a review (quality 1-5).
+
+        Computes new EF, interval, repetitions, and next_review.
+        Returns the updated row as dict.
+        """
+        review = self.get_or_create_card_review(card_id, card_type, video_id, user_id)
+
+        ef = review["ease_factor"]
+        interval = review["interval"]
+        repetitions = review["repetitions"]
+
+        # SM-2 formula: new_EF = max(1.3, EF + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)))
+        new_ef = max(1.3, ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)))
+
+        if quality < 3:
+            # Recall failure: reset
+            new_repetitions = 1
+            new_interval = 1
+        else:
+            # Recall success
+            new_repetitions = repetitions + 1
+            if new_repetitions == 1:
+                new_interval = 1
+            elif new_repetitions == 2:
+                new_interval = 3
+            else:
+                new_interval = int(round(interval * new_ef))
+
+        # Calculate next review date
+        today = date.today()
+        next_review_date = today + timedelta(days=new_interval)
+        next_review_str = next_review_date.isoformat()
+        today_str = today.isoformat()
+
+        # Update the record
+        self._db._conn.execute(
+            "UPDATE card_reviews "
+            "SET ease_factor = ?, interval = ?, repetitions = ?, next_review = ?, last_reviewed = ?, updated_at = datetime('now') "
+            "WHERE card_id = ? AND card_type = ? AND video_id = ? AND COALESCE(user_id, '') = COALESCE(?, '')",
+            (new_ef, new_interval, new_repetitions, next_review_str, today_str, card_id, card_type, video_id, user_id),
+        )
+        self._db._conn.commit()
+
+        # Fetch and return updated row
+        row = self._db._conn.execute(
+            "SELECT id, card_id, card_type, video_id, ease_factor, interval, repetitions, next_review, last_reviewed, user_id "
+            "FROM card_reviews WHERE card_id = ? AND card_type = ? AND video_id = ? AND COALESCE(user_id, '') = COALESCE(?, '')",
+            (card_id, card_type, video_id, user_id),
+        ).fetchone()
+        return {
+            "id": row[0],
+            "card_id": row[1],
+            "card_type": row[2],
+            "video_id": row[3],
+            "ease_factor": row[4],
+            "interval": row[5],
+            "repetitions": row[6],
+            "next_review": row[7],
+            "last_reviewed": row[8],
+            "user_id": row[9],
+        }
+
+    def get_cards_due_today(self, video_id: int, user_id: str | None = None) -> set[str]:
+        """Return set of card_ids that are due for review today or earlier.
+
+        Used for optional filtering in the frontend to show only due cards.
+        """
+        today_str = date.today().isoformat()
+        rows = self._db._conn.execute(
+            "SELECT card_id FROM card_reviews "
+            "WHERE video_id = ? AND next_review <= ? AND COALESCE(user_id, '') = COALESCE(?, '')",
+            (video_id, today_str, user_id),
+        ).fetchall()
+        return {row[0] for row in rows}
 
     # ------------------------------------------------------------------
     # Lifecycle

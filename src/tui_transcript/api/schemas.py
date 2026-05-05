@@ -466,3 +466,25 @@ class StatsSummaryResponse(BaseModel):
     sessions_last_30_days: list[DailySessionEntry]
     daily_goal: int
     today_items: int
+
+
+# ------------------------------------------------------------------
+# Card reviews / Spaced repetition (SEB-86)
+# ------------------------------------------------------------------
+
+
+class CardReviewResponse(BaseModel):
+    """Response for updating a card review (after student rates it)."""
+
+    card_id: str
+    next_review: str
+    ease_factor: float
+    interval: int
+    repetitions: int
+
+
+class RateCardRequest(BaseModel):
+    """Payload for POST /classes/{video_id}/cards/{card_id}/rate."""
+
+    card_type: str = Field(..., min_length=1)  # 'flashcard', 'quiz', 'fill_in_blank', etc.
+    quality: int = Field(..., ge=1, le=5)  # 1-5 rating

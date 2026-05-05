@@ -12,6 +12,18 @@ const API_BASE = '/api';
 export type Urgency = 'high' | 'medium' | 'low';
 
 // ------------------------------------------------------------------
+// Card reviews / Spaced repetition (SEB-86)
+// ------------------------------------------------------------------
+
+export interface CardReviewResponse {
+  card_id: string;
+  next_review: string;
+  ease_factor: number;
+  interval: number;
+  repetitions: number;
+}
+
+// ------------------------------------------------------------------
 // Dashboard alerts
 // ------------------------------------------------------------------
 
@@ -429,4 +441,29 @@ export function subscribeToTranscriptionProgress(
   });
 
   return () => es.close();
+}
+
+// ------------------------------------------------------------------
+// Card rating (spaced repetition)
+// ------------------------------------------------------------------
+
+export async function rateCard(
+  videoId: number,
+  cardId: string,
+  cardType: string,
+  quality: number
+): Promise<CardReviewResponse> {
+  const res = await fetch(
+    `${API_BASE}/classes/${videoId}/cards/${cardId}/rate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_type: cardType, quality }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'Failed to rate card');
+  }
+  return res.json();
 }
