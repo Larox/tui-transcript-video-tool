@@ -139,7 +139,7 @@ function buildDeck(
     const fib = fillInBlanks[i];
     cards.push({
       type: 'fill_in_blank',
-      id: `fib-${item.id}-${i}`,
+      id: `fib-${fib.id}-${i}`,
       sentence: fib.sentence,
       answer: fib.answer,
       hint: fib.hint,
