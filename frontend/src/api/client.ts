@@ -274,6 +274,7 @@ export interface CollectionEntry {
   collection_type: string;
   description: string;
   item_count: number;
+  transcript_count: number;
   created_at: string;
   updated_at: string;
 }

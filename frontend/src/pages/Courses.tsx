@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Loader2, Plus, X } from 'lucide-react';
+import { BookOpen, Download, Loader2, Plus, X } from 'lucide-react';
 import { getCollections, createCollection, type CollectionEntry } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -98,6 +98,9 @@ function CourseCard({ course, onClick }: { course: CollectionEntry; onClick: () 
     day: 'numeric',
   });
 
+  const allTranscribed =
+    course.item_count > 0 && course.transcript_count >= course.item_count;
+
   return (
     <Card
       className="cursor-pointer hover:border-primary/60 hover:shadow-md transition-all py-0"
@@ -120,13 +123,30 @@ function CourseCard({ course, onClick }: { course: CollectionEntry; onClick: () 
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-5 pb-5">
+      <CardContent className="px-5 pb-5 space-y-3">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {course.item_count} clase{course.item_count !== 1 ? 's' : ''}
           </span>
           <span>Actualizado: {updatedAt}</span>
         </div>
+        {allTranscribed && (
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <a
+              href={`/api/classes/transcripts/export?collection_id=${course.id}`}
+              download
+            >
+              <Download className="size-3.5 mr-1.5" />
+              Descargar transcripciones
+            </a>
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -150,10 +170,18 @@ export function Courses() {
             Organiza tus clases por materia
           </p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
-          <Plus className="size-4 mr-2" />
-          Nueva Materia
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <a href="/api/classes/transcripts/export" download>
+              <Download className="size-4 mr-2" />
+              Exportar todas
+            </a>
+          </Button>
+          <Button onClick={() => setShowModal(true)}>
+            <Plus className="size-4 mr-2" />
+            Nueva Materia
+          </Button>
+        </div>
       </div>
 
       {isLoading && (

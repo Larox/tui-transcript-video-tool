@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Loader2, Plus, Upload as UploadIcon } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2, Plus, Upload as UploadIcon, X } from 'lucide-react';
 import { getCollections, createCollection, type CollectionEntry } from '@/api/client';
 import {
   uploadFile,
@@ -14,6 +14,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 // ------------------------------------------------------------------
 // Types
@@ -21,10 +28,19 @@ import { Label } from '@/components/ui/label';
 
 type Step = 'file' | 'details' | 'processing';
 
-interface ProgressState {
+interface PendingFile {
+  uid: string;
+  file: File;
+  className: string;
+}
+
+type FileStatus = 'pending' | 'uploading' | 'transcribing' | 'done' | 'error';
+
+interface FileProgress {
+  status: FileStatus;
   label: string;
   percent: number;
-  done: boolean;
+  videoId: number | null;
   error: string | null;
 }
 
@@ -39,31 +55,48 @@ const LANGUAGES = [
   { code: 'de', label: 'Alemán' },
 ] as const;
 
+function deriveClassName(filename: string): string {
+  return filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').trim();
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 // ------------------------------------------------------------------
-// Step 1: File Drop
+// Step 1: File Drop (multi-select)
 // ------------------------------------------------------------------
 
 function FilePicker({
-  onFile,
+  onFiles,
 }: {
-  onFile: (f: File) => void;
+  onFiles: (files: File[]) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (f: File) => {
-    if (!ALLOWED_EXTENSIONS.test(f.name)) {
-      alert('Formato no soportado. Usa mp4, mkv, mov, avi, webm, m4a, mp3, wav, ogg, flac');
-      return;
+  const handleFiles = (list: FileList | File[]) => {
+    const files = Array.from(list);
+    const valid: File[] = [];
+    const invalid: string[] = [];
+    for (const f of files) {
+      if (ALLOWED_EXTENSIONS.test(f.name)) valid.push(f);
+      else invalid.push(f.name);
     }
-    onFile(f);
+    if (invalid.length > 0) {
+      alert(
+        `Formato no soportado: ${invalid.join(', ')}\n` +
+          'Usa mp4, mkv, mov, avi, webm, m4a, mp3, wav, ogg, flac',
+      );
+    }
+    if (valid.length > 0) onFiles(valid);
   };
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const f = e.dataTransfer.files[0];
-    if (f) handleFile(f);
+    if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
   }, []);
 
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -86,17 +119,18 @@ function FilePicker({
       <input
         ref={inputRef}
         type="file"
+        multiple
         accept=".mp4,.mkv,.mov,.avi,.webm,.m4a,.mp3,.wav,.ogg,.flac"
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleFile(f);
+          if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files);
+          e.target.value = '';
         }}
       />
       <UploadIcon className="mx-auto size-12 text-muted-foreground/40 mb-4" />
-      <p className="text-base font-medium">Suelta tu video o audio aquí</p>
+      <p className="text-base font-medium">Suelta tus videos o audios aquí</p>
       <p className="text-sm text-muted-foreground mt-1">
-        o haz click para buscar
+        Puedes seleccionar varios archivos a la vez
       </p>
       <p className="text-xs text-muted-foreground mt-3">
         mp4, mkv, mov, avi, webm, m4a, mp3, wav, ogg, flac
@@ -106,7 +140,7 @@ function FilePicker({
 }
 
 // ------------------------------------------------------------------
-// Progress display
+// Step 3: per-file progress card
 // ------------------------------------------------------------------
 // Course combobox with search + create
 // ------------------------------------------------------------------
@@ -215,41 +249,61 @@ function CourseCombobox({
 
 // ------------------------------------------------------------------
 
-type ProgressStep = {
-  key: string;
-  label: string;
-};
+function FileProgressCard({
+  pending,
+  progress,
+  onOpen,
+}: {
+  pending: PendingFile;
+  progress: FileProgress;
+  onOpen: (videoId: number) => void;
+}) {
+  const icon =
+    progress.status === 'done' ? (
+      <CheckCircle2 className="size-4 text-green-500 shrink-0" />
+    ) : progress.status === 'error' ? (
+      <X className="size-4 text-destructive shrink-0" />
+    ) : progress.status === 'pending' ? (
+      <div className="size-4 rounded-full border-2 border-muted shrink-0" />
+    ) : (
+      <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+    );
 
-const UPLOAD_STEPS: ProgressStep[] = [
-  { key: 'upload', label: 'Subiendo archivo' },
-  { key: 'transcription', label: 'Transcribiendo' },
-  { key: 'summary', label: 'Generando resumen' },
-  { key: 'qa', label: 'Generando Q&A' },
-  { key: 'flashcards', label: 'Generando flashcards' },
-  { key: 'action_items', label: 'Detectando tareas' },
-];
-
-function ProgressView({ progress }: { progress: ProgressState }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        {progress.done ? (
-          <CheckCircle2 className="size-4 text-green-500" />
-        ) : (
-          <Loader2 className="size-4 animate-spin text-primary" />
+    <Card className="py-3">
+      <CardContent className="px-4 space-y-2">
+        <div className="flex items-center gap-2">
+          {icon}
+          <p className="text-sm font-medium truncate flex-1">{pending.className}</p>
+          <span className="text-xs text-muted-foreground shrink-0">
+            {formatSize(pending.file.size)}
+          </span>
+        </div>
+        <div className="w-full bg-muted rounded-full h-1.5">
+          <div
+            className={`h-1.5 rounded-full transition-all duration-500 ${
+              progress.status === 'error' ? 'bg-destructive' : 'bg-primary'
+            }`}
+            style={{ width: `${progress.percent}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">{progress.label}</p>
+          {progress.status === 'done' && progress.videoId !== null && (
+            <button
+              type="button"
+              onClick={() => onOpen(progress.videoId!)}
+              className="text-xs text-primary hover:underline shrink-0"
+            >
+              Abrir clase
+            </button>
+          )}
+        </div>
+        {progress.error && (
+          <p className="text-xs text-destructive">{progress.error}</p>
         )}
-        {progress.label}
-      </div>
-      <div className="w-full bg-muted rounded-full h-2">
-        <div
-          className="bg-primary h-2 rounded-full transition-all duration-500"
-          style={{ width: `${progress.percent}%` }}
-        />
-      </div>
-      {progress.error && (
-        <p className="text-sm text-destructive">{progress.error}</p>
-      )}
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -273,47 +327,73 @@ export function Upload() {
   )];
 
   const [step, setStep] = useState<Step>('file');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [className, setClassName] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [courseId, setCourseId] = useState<string>(preselectedCourseId ?? '');
   const [language, setLanguage] = useState<string>('es');
   const [engine, setEngine] = useState<Engine>('deepgram');
-  const [progress, setProgress] = useState<ProgressState>({
-    label: 'Iniciando...',
-    percent: 0,
-    done: false,
-    error: null,
-  });
+  const [progressByUid, setProgressByUid] = useState<Record<string, FileProgress>>({});
+  const [batchDone, setBatchDone] = useState(false);
 
-  const handleFileSelected = (f: File) => {
-    setSelectedFile(f);
-    // Auto-fill class name from filename
-    const nameParts = f.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
-    setClassName(nameParts);
+  const handleFilesSelected = (files: File[]) => {
+    const next: PendingFile[] = files.map((f, i) => ({
+      uid: `${Date.now()}-${i}-${f.name}`,
+      file: f,
+      className: deriveClassName(f.name),
+    }));
+    setPendingFiles(next);
     setStep('details');
   };
 
-  const handleStart = async () => {
-    if (!selectedFile || !className.trim()) return;
-    setStep('processing');
+  const addMoreFiles = (files: File[]) => {
+    const next: PendingFile[] = files.map((f, i) => ({
+      uid: `${Date.now()}-${i}-${f.name}`,
+      file: f,
+      className: deriveClassName(f.name),
+    }));
+    setPendingFiles((prev) => [...prev, ...next]);
+  };
+
+  const removeFile = (uid: string) => {
+    setPendingFiles((prev) => prev.filter((p) => p.uid !== uid));
+  };
+
+  const updateClassName = (uid: string, name: string) => {
+    setPendingFiles((prev) =>
+      prev.map((p) => (p.uid === uid ? { ...p, className: name } : p)),
+    );
+  };
+
+  const updateProgress = (uid: string, patch: Partial<FileProgress>) => {
+    setProgressByUid((prev) => ({
+      ...prev,
+      [uid]: { ...prev[uid], ...patch },
+    }));
+  };
+
+  const processFile = async (pending: PendingFile): Promise<void> => {
+    updateProgress(pending.uid, {
+      status: 'uploading',
+      label: 'Subiendo archivo...',
+      percent: 5,
+      error: null,
+    });
 
     try {
-      // Step 1: Upload
-      setProgress({ label: 'Subiendo archivo...', percent: 5, done: false, error: null });
-      const uploaded = await uploadFile(selectedFile);
-      setProgress({ label: 'Archivo subido', percent: 15, done: false, error: null });
+      const uploaded = await uploadFile(pending.file);
+      updateProgress(pending.uid, {
+        status: 'transcribing',
+        label: 'Iniciando transcripción...',
+        percent: 20,
+      });
 
-      // Step 2: Start transcription
-      setProgress({ label: 'Iniciando transcripción...', percent: 20, done: false, error: null });
       const { session_id } = await startLearningTranscription({
         fileId: uploaded.id,
         language,
         engine,
         collectionId: courseId && courseId !== 'none' ? Number(courseId) : undefined,
-        className: className.trim(),
+        className: pending.className.trim() || pending.file.name,
       });
 
-      // Step 3: Listen to SSE progress
       let resolvedVideoId: number | null = null;
 
       await new Promise<void>((resolve, reject) => {
@@ -321,56 +401,84 @@ export function Upload() {
           session_id,
           (event: TranscriptionEvent) => {
             if (event.type === 'status_label') {
-              setProgress((p) => ({ ...p, label: event.label, percent: Math.min(p.percent + 10, 80) }));
+              updateProgress(pending.uid, {
+                label: event.label,
+                percent: Math.min((progressByUid[pending.uid]?.percent ?? 20) + 10, 80),
+              });
             } else if (event.type === 'progress') {
-              setProgress((p) => ({
-                ...p,
-                percent: Math.min(p.percent + 5, 85),
-              }));
+              setProgressByUid((prev) => {
+                const cur = prev[pending.uid];
+                return {
+                  ...prev,
+                  [pending.uid]: { ...cur, percent: Math.min(cur.percent + 5, 85) },
+                };
+              });
             } else if (event.type === 'job_status') {
-              if (event.job.video_id) {
-                resolvedVideoId = event.job.video_id;
-              }
+              if (event.job.video_id) resolvedVideoId = event.job.video_id;
               if (event.job.status === 'done') {
-                setProgress({ label: 'Transcripción completa', percent: 90, done: false, error: null });
+                updateProgress(pending.uid, {
+                  label: 'Transcripción completa',
+                  percent: 90,
+                });
               } else if (event.job.status === 'error') {
                 cancel();
                 reject(new Error(event.job.error || 'Transcription failed'));
               }
             } else if (event.type === 'done') {
               cancel();
-              setProgress({ label: '¡Listo!', percent: 100, done: true, error: null });
               resolve();
             } else if (event.type === 'error') {
               cancel();
               reject(new Error(event.message));
             }
           },
-          (err) => {
-            reject(err);
-          }
+          (err) => reject(err),
         );
       });
 
-      // Navigate to the class detail if we have a video_id
-      if (resolvedVideoId) {
-        navigate(`/classes/${resolvedVideoId}`);
-      } else {
-        // Fall back to courses
-        navigate(courseId && courseId !== 'none' ? `/courses/${courseId}` : '/courses');
-      }
+      updateProgress(pending.uid, {
+        status: 'done',
+        label: '¡Listo!',
+        percent: 100,
+        videoId: resolvedVideoId,
+      });
     } catch (e) {
-      setProgress((p) => ({
-        ...p,
-        done: false,
+      updateProgress(pending.uid, {
+        status: 'error',
+        label: 'Error',
         error: (e as Error).message,
-      }));
+      });
+      throw e;
     }
   };
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const handleStart = async () => {
+    if (pendingFiles.length === 0) return;
+    if (pendingFiles.some((p) => !p.className.trim())) return;
+    setStep('processing');
+    setBatchDone(false);
+
+    const initial: Record<string, FileProgress> = {};
+    for (const p of pendingFiles) {
+      initial[p.uid] = {
+        status: 'pending',
+        label: 'En cola',
+        percent: 0,
+        videoId: null,
+        error: null,
+      };
+    }
+    setProgressByUid(initial);
+
+    for (const pending of pendingFiles) {
+      try {
+        await processFile(pending);
+      } catch {
+        // Already recorded on the file's progress; continue with the rest.
+      }
+    }
+
+    setBatchDone(true);
   };
 
   return (
@@ -386,11 +494,11 @@ export function Upload() {
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-3"
         >
           <ArrowLeft className="size-4" />
-          {step === 'details' ? 'Cambiar archivo' : 'Volver'}
+          {step === 'details' ? 'Cambiar archivos' : 'Volver'}
         </button>
-        <h1 className="text-2xl font-bold">Subir Clase</h1>
+        <h1 className="text-2xl font-bold">Subir Clases</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Sube un video o audio para transcribir y generar material de estudio
+          Sube uno o varios videos o audios para transcribir y generar material de estudio
         </p>
       </div>
 
@@ -398,7 +506,7 @@ export function Upload() {
       {step !== 'processing' && (
         <div className="flex items-center gap-2 text-sm">
           <span className={`font-medium ${step === 'file' ? 'text-foreground' : 'text-muted-foreground'}`}>
-            1. Archivo
+            1. Archivos
           </span>
           <ChevronRightIcon />
           <span className={`font-medium ${step === 'details' ? 'text-foreground' : 'text-muted-foreground'}`}>
@@ -408,38 +516,57 @@ export function Upload() {
       )}
 
       {/* Step 1: File picker */}
-      {step === 'file' && <FilePicker onFile={handleFileSelected} />}
+      {step === 'file' && <FilePicker onFiles={handleFilesSelected} />}
 
       {/* Step 2: Details */}
-      {step === 'details' && selectedFile && (
-        <div className="space-y-4 max-w-lg">
-          {/* Selected file */}
-          <Card className="py-3">
-            <CardContent className="px-4 flex items-center gap-3">
-              <UploadIcon className="size-4 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{selectedFile.name}</p>
-                <p className="text-xs text-muted-foreground">{formatSize(selectedFile.size)}</p>
-              </div>
+      {step === 'details' && pendingFiles.length > 0 && (
+        <div className="space-y-4 max-w-2xl">
+          {/* File list with editable names */}
+          <Card>
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle className="text-base">
+                {pendingFiles.length} archivo{pendingFiles.length !== 1 ? 's' : ''} seleccionado
+                {pendingFiles.length !== 1 ? 's' : ''}
+              </CardTitle>
+              <AddMoreButton onAdd={addMoreFiles} />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {pendingFiles.map((p) => (
+                <div
+                  key={p.uid}
+                  className="flex items-start gap-2 p-3 rounded-lg border bg-muted/20"
+                >
+                  <UploadIcon className="size-4 text-muted-foreground shrink-0 mt-2" />
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <Input
+                      value={p.className}
+                      onChange={(e) => updateClassName(p.uid, e.target.value)}
+                      placeholder="Nombre de la clase"
+                      className="h-8 text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground truncate">
+                      {p.file.name} · {formatSize(p.file.size)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => removeFile(p.uid)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
             </CardContent>
           </Card>
 
-          {/* Form */}
+          {/* Shared settings */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Detalles de la clase</CardTitle>
+              <CardTitle className="text-base">Configuración del lote</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="class-name">Nombre de la clase</Label>
-                <Input
-                  id="class-name"
-                  placeholder="e.g. Clase 3 — Límites"
-                  value={className}
-                  onChange={(e) => setClassName(e.target.value)}
-                />
-              </div>
-
               <div className="space-y-1.5">
                 <Label htmlFor="course-select">Materia (opcional)</Label>
                 <CourseCombobox
@@ -493,75 +620,87 @@ export function Upload() {
 
           <Button
             onClick={handleStart}
-            disabled={!className.trim()}
+            disabled={pendingFiles.some((p) => !p.className.trim())}
             size="lg"
             className="w-full"
           >
             <UploadIcon className="size-4 mr-2" />
-            Comenzar Transcripción
+            Comenzar Transcripción ({pendingFiles.length})
           </Button>
         </div>
       )}
 
       {/* Step 3: Processing */}
       {step === 'processing' && (
-        <div className="max-w-lg space-y-4">
+        <div className="max-w-2xl space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Procesando "{className}"</CardTitle>
+              <CardTitle className="text-base">
+                Procesando {pendingFiles.length} clase{pendingFiles.length !== 1 ? 's' : ''}
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <ProgressView progress={progress} />
-              {progress.error && (
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => setStep('details')}
-                >
-                  Volver a intentar
-                </Button>
-              )}
-              {progress.done && (
-                <p className="text-sm text-muted-foreground mt-3">
-                  Redirigiendo a la clase...
-                </p>
-              )}
+            <CardContent className="space-y-3">
+              {pendingFiles.map((p) => (
+                <FileProgressCard
+                  key={p.uid}
+                  pending={p}
+                  progress={progressByUid[p.uid] ?? {
+                    status: 'pending',
+                    label: 'En cola',
+                    percent: 0,
+                    videoId: null,
+                    error: null,
+                  }}
+                  onOpen={(vid) => navigate(`/classes/${vid}`)}
+                />
+              ))}
             </CardContent>
           </Card>
 
-          {/* Progress steps */}
-          <div className="space-y-2">
-            {UPLOAD_STEPS.map(({ key, label }, idx) => {
-              const stepPercent = ((idx + 1) / UPLOAD_STEPS.length) * 100;
-              const done = progress.percent >= stepPercent;
-              const active = !done && progress.percent >= ((idx) / UPLOAD_STEPS.length) * 100;
-              return (
-                <div key={key} className="flex items-center gap-2 text-sm">
-                  {done ? (
-                    <CheckCircle2 className="size-4 text-green-500 shrink-0" />
-                  ) : active ? (
-                    <Loader2 className="size-4 animate-spin text-primary shrink-0" />
-                  ) : (
-                    <div className="size-4 rounded-full border-2 border-muted shrink-0" />
-                  )}
-                  <span
-                    className={
-                      done
-                        ? 'text-muted-foreground line-through'
-                        : active
-                        ? 'text-foreground font-medium'
-                        : 'text-muted-foreground'
-                    }
-                  >
-                    {label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          {batchDone && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {Object.values(progressByUid).filter((p) => p.status === 'done').length} de{' '}
+                {pendingFiles.length} completadas
+              </p>
+              <Button
+                onClick={() =>
+                  navigate(courseId && courseId !== 'none' ? `/courses/${courseId}` : '/courses')
+                }
+              >
+                Ir a Mis Materias
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function AddMoreButton({ onAdd }: { onAdd: (files: File[]) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept=".mp4,.mkv,.mov,.avi,.webm,.m4a,.mp3,.wav,.ogg,.flac"
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          if (!files || files.length === 0) return;
+          const valid = Array.from(files).filter((f) => ALLOWED_EXTENSIONS.test(f.name));
+          if (valid.length > 0) onAdd(valid);
+          e.target.value = '';
+        }}
+      />
+      <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+        <UploadIcon className="size-3.5 mr-1.5" />
+        Añadir más
+      </Button>
+    </>
   );
 }
 

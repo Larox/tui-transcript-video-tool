@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Download,
+  FileText,
   Loader2,
   PenLine,
   RotateCcw,
@@ -17,6 +19,7 @@ import {
 } from 'lucide-react';
 import {
   getSummary,
+  getTranscript,
   getQA,
   getFlashcards,
   getActionItems,
@@ -67,6 +70,17 @@ function urgencyBadge(urgency: Urgency) {
 // Sub-components
 // ------------------------------------------------------------------
 
+const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Spanish', label: 'Español' },
+  { value: 'English', label: 'English' },
+  { value: 'Portuguese', label: 'Português' },
+  { value: 'French', label: 'Français' },
+  { value: 'German', label: 'Deutsch' },
+  { value: 'Italian', label: 'Italiano' },
+];
+
+const LANGUAGE_STORAGE_KEY = 'study-material-language';
+
 function GenerateButton({
   videoId,
   onComplete,
@@ -77,6 +91,14 @@ function GenerateButton({
   const [generating, setGenerating] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Set<GenStep>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [language, setLanguage] = useState<string>(
+    () => localStorage.getItem(LANGUAGE_STORAGE_KEY) ?? 'Spanish'
+  );
+
+  const handleLanguageChange = useCallback((value: string) => {
+    setLanguage(value);
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, value);
+  }, []);
 
   const handleGenerate = useCallback(() => {
     setGenerating(true);
@@ -100,25 +122,43 @@ function GenerateButton({
       (err) => {
         setError(err.message);
         setGenerating(false);
-      }
+      },
+      language,
     );
-  }, [videoId, onComplete]);
+  }, [videoId, onComplete, language]);
 
   return (
     <div className="space-y-3">
-      <Button onClick={handleGenerate} disabled={generating}>
-        {generating ? (
-          <>
-            <Loader2 className="size-4 mr-2 animate-spin" />
-            Generando...
-          </>
-        ) : (
-          <>
-            <Sparkles className="size-4 mr-2" />
-            Generar Material de Estudio
-          </>
-        )}
-      </Button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button onClick={handleGenerate} disabled={generating}>
+          {generating ? (
+            <>
+              <Loader2 className="size-4 mr-2 animate-spin" />
+              Generando...
+            </>
+          ) : (
+            <>
+              <Sparkles className="size-4 mr-2" />
+              Generar Material de Estudio
+            </>
+          )}
+        </Button>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>Idioma:</span>
+          <select
+            value={language}
+            onChange={(e) => handleLanguageChange(e.target.value)}
+            disabled={generating}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          >
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {generating && (
         <div className="space-y-1.5">
@@ -149,6 +189,24 @@ function GenerateButton({
       {error && (
         <p className="text-sm text-destructive">Error: {error}</p>
       )}
+    </div>
+  );
+}
+
+function TranscriptSection({ videoId }: { videoId: number }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['transcript', videoId],
+    queryFn: () => getTranscript(videoId),
+    retry: false,
+  });
+
+  if (isLoading) return <div className="flex justify-center py-4"><Loader2 className="size-4 animate-spin text-muted-foreground" /></div>;
+  if (error || !data?.text)
+    return <p className="text-sm text-muted-foreground italic">Sin transcripción disponible.</p>;
+
+  return (
+    <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
+      {data.text}
     </div>
   );
 }
@@ -280,6 +338,10 @@ function FlashcardsSection({ videoId }: { videoId: number }) {
   );
 }
 
+type TareasSort = 'priority' | 'date' | 'original';
+
+const URGENCY_RANK: Record<Urgency, number> = { high: 0, medium: 1, low: 2 };
+
 function ActionItemsSection({
   videoId,
   showDismissed = false,
@@ -290,6 +352,14 @@ function ActionItemsSection({
   const queryClient = useQueryClient();
   const [dismissing, setDismissing] = useState<Set<number>>(new Set());
   const [localDismissed, setLocalDismissed] = useState<Set<number>>(new Set());
+  const [sortMode, setSortMode] = useState<TareasSort>(
+    () => (localStorage.getItem('tareas-sort') as TareasSort | null) ?? 'priority',
+  );
+
+  const handleSortChange = useCallback((mode: TareasSort) => {
+    setSortMode(mode);
+    localStorage.setItem('tareas-sort', mode);
+  }, []);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['action-items', videoId],
@@ -322,9 +392,26 @@ function ActionItemsSection({
   if (isLoading) return <div className="flex justify-center py-4"><Loader2 className="size-4 animate-spin text-muted-foreground" /></div>;
   if (error) return <p className="text-sm text-muted-foreground italic">Sin tareas todavía.</p>;
 
-  const items = (data?.items ?? []).filter(
+  const filtered = (data?.items ?? []).filter(
     (item) => showDismissed || (!item.dismissed && !localDismissed.has(item.id))
   );
+
+  const items = [...filtered].sort((a, b) => {
+    if (sortMode === 'priority') {
+      const diff = URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency];
+      if (diff !== 0) return diff;
+      return a.id - b.id;
+    }
+    if (sortMode === 'date') {
+      const av = a.extracted_date ?? '';
+      const bv = b.extracted_date ?? '';
+      if (av && bv) return av.localeCompare(bv);
+      if (av) return -1;
+      if (bv) return 1;
+      return a.id - b.id;
+    }
+    return a.id - b.id;
+  });
 
   if (items.length === 0)
     return (
@@ -335,7 +422,19 @@ function ActionItemsSection({
     );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <div className="flex items-center justify-end gap-2">
+        <label className="text-xs text-muted-foreground">Ordenar:</label>
+        <select
+          value={sortMode}
+          onChange={(e) => handleSortChange(e.target.value as TareasSort)}
+          className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="priority">Prioridad</option>
+          <option value="date">Fecha</option>
+          <option value="original">Original</option>
+        </select>
+      </div>
       {items.map((item: ActionItem) => (
         <Card key={item.id} className="py-0">
           <CardContent className="px-4 py-3 flex items-start gap-3">
@@ -576,10 +675,11 @@ function ErrorDetectionSection({ videoId }: { videoId: number }) {
 // Main page
 // ------------------------------------------------------------------
 
-type Tab = 'resumen' | 'qa' | 'flashcards' | 'tareas' | 'completar' | 'verdadero-falso' | 'errores';
+type Tab = 'resumen' | 'transcripcion' | 'qa' | 'flashcards' | 'tareas' | 'completar' | 'verdadero-falso' | 'errores';
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: 'resumen', label: 'Resumen', icon: BookOpen },
+  { id: 'transcripcion', label: 'Transcripción', icon: FileText },
   { id: 'qa', label: 'Q&A', icon: Zap },
   { id: 'flashcards', label: 'Flashcards', icon: RotateCcw },
   { id: 'tareas', label: 'Tareas', icon: CheckCircle2 },
@@ -633,6 +733,12 @@ export function ClassDetail() {
         </Link>
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-2xl font-bold leading-tight">{title}</h1>
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            <a href={`/api/classes/${id}/transcript.md`} download>
+              <Download className="size-3.5 mr-1.5" />
+              Exportar transcripción
+            </a>
+          </Button>
         </div>
         {video?.processed_at && (
           <p className="text-xs text-muted-foreground mt-1">
@@ -675,6 +781,7 @@ export function ClassDetail() {
 
         <div>
           {activeTab === 'resumen' && <SummarySection videoId={id} />}
+          {activeTab === 'transcripcion' && <TranscriptSection videoId={id} />}
           {activeTab === 'qa' && <QASection videoId={id} />}
           {activeTab === 'flashcards' && <FlashcardsSection videoId={id} />}
           {activeTab === 'tareas' && <ActionItemsSection videoId={id} />}

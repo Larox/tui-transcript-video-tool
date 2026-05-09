@@ -40,8 +40,9 @@ async def _run_pipeline_with_sse(
     config,
     jobs: list[VideoJob],
     queue: asyncio.Queue,
-    output_dir: Path,
+    output_dir: Path | None,
     course_name: str,
+    collection_id: int | None = None,
 ) -> None:
     """Run pipeline, pushing events to queue."""
 
@@ -66,6 +67,23 @@ async def _run_pipeline_with_sse(
             output_dir=output_dir,
             course_name=course_name,
         )
+        if collection_id is not None:
+            from tui_transcript.services.collection_store import CollectionStore
+
+            store = CollectionStore()
+            try:
+                store.get_collection(collection_id)
+                for job in jobs:
+                    if job.video_id is not None:
+                        store.add_item(collection_id, job.video_id)
+            except KeyError:
+                queue.put_nowait({
+                    "type": "log",
+                    "message": f"Collection {collection_id} not found; skipped attaching videos.",
+                    "level": LogLevel.ERROR,
+                })
+            finally:
+                store.close()
     finally:
         queue.put_nowait({"type": "done"})
         complete_session(session_id)
@@ -96,23 +114,27 @@ async def start_transcription(req: TranscriptionStartRequest) -> TranscriptionSt
                     "Download it in Settings.",
                 )
 
-    from tui_transcript.services.history import HistoryDB
+    dir_path: Path | None = None
+    course_name = ""
+    if req.directory_id is not None:
+        from tui_transcript.services.history import HistoryDB
 
-    db = HistoryDB()
-    try:
-        directory = db.get_directory(req.directory_id)
-    finally:
-        db.close()
+        db = HistoryDB()
+        try:
+            directory = db.get_directory(req.directory_id)
+        finally:
+            db.close()
 
-    if directory is None:
-        raise HTTPException(404, f"Directory id {req.directory_id} not found")
+        if directory is None:
+            raise HTTPException(404, f"Directory id {req.directory_id} not found")
 
-    dir_path = Path(directory["path"])
-    if not dir_path.is_dir():
-        raise HTTPException(
-            422,
-            f"Class folder missing at {directory['path']}. Please re-attach in Documents.",
-        )
+        dir_path = Path(directory["path"])
+        if not dir_path.is_dir():
+            raise HTTPException(
+                422,
+                f"Class folder missing at {directory['path']}. Please re-attach in Documents.",
+            )
+        course_name = directory["name"]
 
     jobs: list[VideoJob] = []
     for spec in req.files:
@@ -125,6 +147,7 @@ async def start_transcription(req: TranscriptionStartRequest) -> TranscriptionSt
             status=JobStatus.PENDING,
             engine=spec.engine,
             whisper_model=spec.whisper_model,
+            output_title=spec.output_title,
         )
         jobs.append(job)
 
@@ -138,7 +161,8 @@ async def start_transcription(req: TranscriptionStartRequest) -> TranscriptionSt
             jobs,
             queue,
             output_dir=dir_path,
-            course_name=directory["name"],
+            course_name=course_name,
+            collection_id=req.collection_id,
         ),
     )
     set_session_task(session_id, task)

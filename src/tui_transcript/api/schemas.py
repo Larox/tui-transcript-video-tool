@@ -52,13 +52,19 @@ class FileSpec(BaseModel):
     language: str = "es"
     engine: Literal["deepgram", "whisper_local"] = "deepgram"
     whisper_model: Literal["small", "medium", "large-v3"] | None = None
+    output_title: str | None = None
 
 
 class TranscriptionStartRequest(BaseModel):
     """Request to start transcription."""
 
     files: list[FileSpec] = Field(..., min_length=1)
-    directory_id: int = Field(..., description="ID of the registered output directory (a 'class')")
+    directory_id: int | None = Field(
+        None, description="ID of the registered output directory; falls back to config default"
+    )
+    collection_id: int | None = Field(
+        None, description="Optional collection (course) to add the resulting videos to"
+    )
 
 
 class TranscriptionStartResponse(BaseModel):
@@ -213,6 +219,7 @@ class CollectionEntry(BaseModel):
     collection_type: str
     description: str
     item_count: int = 0
+    transcript_count: int = 0
     created_at: str
     updated_at: str
 
@@ -316,6 +323,12 @@ class SummaryResponse(BaseModel):
 
     text: str
     generated_at: str
+
+
+class TranscriptResponse(BaseModel):
+    """Response for GET /classes/{video_id}/transcript."""
+
+    text: str
 
 
 class QAPair(BaseModel):

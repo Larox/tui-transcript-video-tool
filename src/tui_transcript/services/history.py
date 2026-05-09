@@ -583,9 +583,12 @@ class HistoryDB:
         rows = self._conn.execute(
             "SELECT c.id, c.name, c.collection_type, c.description, "
             "c.created_at, c.updated_at, "
-            "COUNT(ci.id) AS item_count "
+            "COUNT(ci.id) AS item_count, "
+            "SUM(CASE WHEN ts.video_id IS NOT NULL THEN 1 ELSE 0 END) "
+            "  AS transcript_count "
             "FROM collections c "
             "LEFT JOIN collection_items ci ON ci.collection_id = c.id "
+            "LEFT JOIN transcript_search ts ON ts.video_id = ci.video_id "
             "GROUP BY c.id ORDER BY c.updated_at DESC"
         ).fetchall()
         return [
@@ -597,6 +600,7 @@ class HistoryDB:
                 "created_at": r[4],
                 "updated_at": r[5],
                 "item_count": r[6],
+                "transcript_count": r[7] or 0,
             }
             for r in rows
         ]

@@ -91,6 +91,10 @@ export interface SummaryResponse {
   generated_at: string;
 }
 
+export interface TranscriptResponse {
+  text: string;
+}
+
 export interface QAPair {
   question: string;
   answer: string;
@@ -128,6 +132,15 @@ export async function getSummary(videoId: number): Promise<SummaryResponse> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { detail?: string }).detail || 'No summary found');
+  }
+  return res.json();
+}
+
+export async function getTranscript(videoId: number): Promise<TranscriptResponse> {
+  const res = await fetch(`${API_BASE}/classes/${videoId}/transcript`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || 'No transcript found');
   }
   return res.json();
 }
@@ -296,14 +309,18 @@ export type GenerationEvent =
 export function startGeneration(
   videoId: number,
   onEvent: (event: GenerationEvent) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  language?: string,
 ): () => void {
   let cancelled = false;
   const controller = new AbortController();
 
   (async () => {
     try {
-      const res = await fetch(`${API_BASE}/classes/${videoId}/generate`, {
+      const url = language
+        ? `${API_BASE}/classes/${videoId}/generate?language=${encodeURIComponent(language)}`
+        : `${API_BASE}/classes/${videoId}/generate`;
+      const res = await fetch(url, {
         method: 'POST',
         signal: controller.signal,
       });

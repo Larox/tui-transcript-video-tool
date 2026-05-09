@@ -116,6 +116,8 @@ class VideoJob:
     key_moments: list[KeyMoment] = field(default_factory=list)
     engine: str = "deepgram"
     whisper_model: str | None = None
+    output_title: str | None = None
+    video_id: int | None = None
 
     def to_dict(self) -> dict:
         """Serialize for API/JSON. Path becomes string."""
@@ -133,6 +135,8 @@ class VideoJob:
             ],
             "engine": self.engine,
             "whisper_model": self.whisper_model,
+            "output_title": self.output_title,
+            "video_id": self.video_id,
         }
 
     @classmethod
@@ -154,6 +158,8 @@ class VideoJob:
             ],
             engine=data.get("engine", "deepgram"),
             whisper_model=data.get("whisper_model"),
+            output_title=data.get("output_title"),
+            video_id=data.get("video_id"),
         )
 
 

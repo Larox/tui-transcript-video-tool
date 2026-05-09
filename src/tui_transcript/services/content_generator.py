@@ -152,11 +152,21 @@ _ERROR_DETECTION_INSTRUCTIONS = (
 )
 
 
+def _with_language(instructions: str, language: str | None) -> str:
+    """Append a language directive to the system instructions if provided."""
+    if not language:
+        return instructions
+    return (
+        f"{instructions} Write ALL output (questions, answers, explanations, hints, "
+        f"statements, etc.) in {language}, regardless of the transcript's language."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Generators
 # ---------------------------------------------------------------------------
 
-async def generate_summary(transcript: str) -> str:
+async def generate_summary(transcript: str, language: str | None = None) -> str:
     """Generate a 200-400 word executive summary. Returns '' on failure."""
     if not transcript or not transcript.strip():
         return ""
@@ -170,7 +180,7 @@ async def generate_summary(transcript: str) -> str:
         msg = await client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
-            system=_SUMMARY_INSTRUCTIONS,
+            system=_with_language(_SUMMARY_INSTRUCTIONS, language),
             messages=[{"role": "user", "content": transcript}],
         )
         return msg.content[0].text.strip()
@@ -179,7 +189,7 @@ async def generate_summary(transcript: str) -> str:
         return ""
 
 
-async def generate_qa_pairs(transcript: str) -> list[dict]:
+async def generate_qa_pairs(transcript: str, language: str | None = None) -> list[dict]:
     """Generate 10 Q&A pairs. Each dict: question, answer, starred. Returns [] on failure."""
     if not transcript or not transcript.strip():
         return []
@@ -188,7 +198,8 @@ async def generate_qa_pairs(transcript: str) -> list[dict]:
         return []
     try:
         agent: Agent[None, _QAResult] = Agent(
-            _get_model(), output_type=_QAResult, instructions=_QA_INSTRUCTIONS
+            _get_model(), output_type=_QAResult,
+            instructions=_with_language(_QA_INSTRUCTIONS, language),
         )
         result = await agent.run(transcript)
         return [item.model_dump() for item in result.output.pairs]
@@ -197,7 +208,7 @@ async def generate_qa_pairs(transcript: str) -> list[dict]:
         return []
 
 
-async def generate_flashcards(transcript: str) -> list[dict]:
+async def generate_flashcards(transcript: str, language: str | None = None) -> list[dict]:
     """Generate 20 flashcards. Each dict: concept, definition, starred. Returns [] on failure."""
     if not transcript or not transcript.strip():
         return []
@@ -206,7 +217,8 @@ async def generate_flashcards(transcript: str) -> list[dict]:
         return []
     try:
         agent: Agent[None, _FlashcardResult] = Agent(
-            _get_model(), output_type=_FlashcardResult, instructions=_FLASHCARD_INSTRUCTIONS
+            _get_model(), output_type=_FlashcardResult,
+            instructions=_with_language(_FLASHCARD_INSTRUCTIONS, language),
         )
         result = await agent.run(transcript)
         return [item.model_dump() for item in result.output.cards]
@@ -215,7 +227,7 @@ async def generate_flashcards(transcript: str) -> list[dict]:
         return []
 
 
-async def generate_action_items(transcript: str) -> list[dict]:
+async def generate_action_items(transcript: str, language: str | None = None) -> list[dict]:
     """Extract action items. Each dict: text, urgency, extracted_date. Returns [] on failure."""
     if not transcript or not transcript.strip():
         return []
@@ -224,7 +236,8 @@ async def generate_action_items(transcript: str) -> list[dict]:
         return []
     try:
         agent: Agent[None, _ActionItemResult] = Agent(
-            _get_model(), output_type=_ActionItemResult, instructions=_ACTION_ITEMS_INSTRUCTIONS
+            _get_model(), output_type=_ActionItemResult,
+            instructions=_with_language(_ACTION_ITEMS_INSTRUCTIONS, language),
         )
         result = await agent.run(transcript)
         return [item.model_dump() for item in result.output.items]
@@ -233,7 +246,7 @@ async def generate_action_items(transcript: str) -> list[dict]:
         return []
 
 
-async def generate_fill_in_blank(transcript: str) -> list[dict]:
+async def generate_fill_in_blank(transcript: str, language: str | None = None) -> list[dict]:
     """Generate 10 fill-in-blank items. Each dict: sentence, answer, hint, starred. Returns [] on failure."""
     if not transcript or not transcript.strip():
         return []
@@ -242,7 +255,8 @@ async def generate_fill_in_blank(transcript: str) -> list[dict]:
         return []
     try:
         agent: Agent[None, _FillInBlankResult] = Agent(
-            _get_model(), output_type=_FillInBlankResult, instructions=_FILL_IN_BLANK_INSTRUCTIONS
+            _get_model(), output_type=_FillInBlankResult,
+            instructions=_with_language(_FILL_IN_BLANK_INSTRUCTIONS, language),
         )
         result = await agent.run(transcript)
         return [item.model_dump() for item in result.output.items]
@@ -251,7 +265,7 @@ async def generate_fill_in_blank(transcript: str) -> list[dict]:
         return []
 
 
-async def generate_true_false(transcript: str) -> list[dict]:
+async def generate_true_false(transcript: str, language: str | None = None) -> list[dict]:
     """Generate 15 true/false items. Each dict: statement, is_true, explanation, starred. Returns [] on failure."""
     if not transcript or not transcript.strip():
         return []
@@ -260,7 +274,8 @@ async def generate_true_false(transcript: str) -> list[dict]:
         return []
     try:
         agent: Agent[None, _TrueFalseResult] = Agent(
-            _get_model(), output_type=_TrueFalseResult, instructions=_TRUE_FALSE_INSTRUCTIONS
+            _get_model(), output_type=_TrueFalseResult,
+            instructions=_with_language(_TRUE_FALSE_INSTRUCTIONS, language),
         )
         result = await agent.run(transcript)
         return [item.model_dump() for item in result.output.items]
@@ -269,7 +284,7 @@ async def generate_true_false(transcript: str) -> list[dict]:
         return []
 
 
-async def generate_error_detection(transcript: str) -> list[dict]:
+async def generate_error_detection(transcript: str, language: str | None = None) -> list[dict]:
     """Generate 10 error-detection items. Each dict: statement, error, correction, explanation, starred. Returns [] on failure."""
     if not transcript or not transcript.strip():
         return []
@@ -278,7 +293,8 @@ async def generate_error_detection(transcript: str) -> list[dict]:
         return []
     try:
         agent: Agent[None, _ErrorDetectionResult] = Agent(
-            _get_model(), output_type=_ErrorDetectionResult, instructions=_ERROR_DETECTION_INSTRUCTIONS
+            _get_model(), output_type=_ErrorDetectionResult,
+            instructions=_with_language(_ERROR_DETECTION_INSTRUCTIONS, language),
         )
         result = await agent.run(transcript)
         return [item.model_dump() for item in result.output.items]
@@ -287,16 +303,16 @@ async def generate_error_detection(transcript: str) -> list[dict]:
         return []
 
 
-async def generate_all(transcript: str) -> dict:
+async def generate_all(transcript: str, language: str | None = None) -> dict:
     """Run all 7 generators and return a combined result dict."""
     summary, qa_pairs, flashcards, action_items, fill_in_blank, true_false, error_detection = (
-        await generate_summary(transcript),
-        await generate_qa_pairs(transcript),
-        await generate_flashcards(transcript),
-        await generate_action_items(transcript),
-        await generate_fill_in_blank(transcript),
-        await generate_true_false(transcript),
-        await generate_error_detection(transcript),
+        await generate_summary(transcript, language),
+        await generate_qa_pairs(transcript, language),
+        await generate_flashcards(transcript, language),
+        await generate_action_items(transcript, language),
+        await generate_fill_in_blank(transcript, language),
+        await generate_true_false(transcript, language),
+        await generate_error_detection(transcript, language),
     )
     return {
         "summary": summary,

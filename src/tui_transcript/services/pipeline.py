@@ -167,7 +167,14 @@ async def run_pipeline(
 
                 # --- Build title (with history-aware numbering) ---
                 seq_number: int | None = None
-                if config.naming_mode == NamingMode.SEQUENTIAL:
+                if job.output_title:
+                    base_title = job.output_title
+                    title = base_title
+                    suffix = 2
+                    while history.get_output_title_exists(title, output_mode):
+                        title = f"{base_title}_{suffix}"
+                        suffix += 1
+                elif config.naming_mode == NamingMode.SEQUENTIAL:
                     seq_number = next_seq
                     title = build_doc_title(config, job.path, next_seq)
                 else:
@@ -243,13 +250,16 @@ async def run_pipeline(
                 video_record = history.get_video_by_source_and_prefix(
                     source_path, config.prefix, output_mode
                 )
-                if video_record and job.transcript:
-                    history.index_transcript(
-                        video_record["id"],
-                        title,
-                        source_path,
-                        job.transcript,
-                    )
+                if video_record:
+                    job.video_id = video_record["id"]
+                    cb.on_job_status_changed(job)
+                    if job.transcript:
+                        history.index_transcript(
+                            video_record["id"],
+                            title,
+                            source_path,
+                            job.transcript,
+                        )
 
                 if config.naming_mode == NamingMode.SEQUENTIAL:
                     next_seq += 1
