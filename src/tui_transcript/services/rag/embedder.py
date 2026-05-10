@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-import struct
+import re
 from typing import Protocol
 
 logger = logging.getLogger(__name__)
@@ -27,12 +27,17 @@ class Embedder(Protocol):
         ...
 
 
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
 class FakeEmbedder:
     """Deterministic, network-free embedder for tests.
 
-    Hashes each text and stretches the digest into `dim` floats. Same text →
-    same vector; different texts → different vectors. Not semantically
-    meaningful — only useful for verifying ingest/retrieve plumbing.
+    Bag-of-words sparse embedding: each lowercased word in the input deterministically
+    hashes to one of `dim` slots, and its count is added there. The vector is then
+    normalized to unit length. Same text → same vector; texts that share words have
+    non-zero cosine similarity; texts with no shared words are orthogonal. Not
+    semantically meaningful, but good enough for offline retrieval-plumbing tests.
     """
 
     model: str = "fake-embedder-v1"
@@ -43,14 +48,20 @@ class FakeEmbedder:
     def embed(self, texts: list[str]) -> list[list[float]]:
         out: list[list[float]] = []
         for t in texts:
-            digest = hashlib.sha256(t.encode("utf-8")).digest()
-            # Repeat the 32-byte digest until we have dim*4 bytes of float32 source.
-            need = self.dim * 4
-            buf = (digest * ((need // len(digest)) + 1))[:need]
-            floats = list(struct.unpack(f"{self.dim}f", buf))
-            # Normalize to unit length so cosine math behaves.
-            norm = sum(x * x for x in floats) ** 0.5 or 1.0
-            out.append([x / norm for x in floats])
+            vec = [0.0] * self.dim
+            for word in _WORD_RE.findall(t.lower()):
+                h = hashlib.sha256(word.encode("utf-8")).digest()
+                slot = int.from_bytes(h[:8], "big") % self.dim
+                vec[slot] += 1.0
+            norm = sum(x * x for x in vec) ** 0.5
+            if norm == 0.0:
+                # Fallback: an entirely word-less input still gets a deterministic vector
+                # so identical empty/punctuation strings remain equal.
+                h = hashlib.sha256(t.encode("utf-8")).digest()
+                slot = int.from_bytes(h[:8], "big") % self.dim
+                vec[slot] = 1.0
+                norm = 1.0
+            out.append([x / norm for x in vec])
         return out
 
 
