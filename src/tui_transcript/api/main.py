@@ -20,8 +20,10 @@ from tui_transcript.api.routes import (
     files,
     generation,
     learning,
+    materia_files,
     models,
     paths,
+    rag,
     search,
     stats,
     tags,
@@ -59,10 +61,14 @@ def auto_register_legacy_output_dir() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     auto_register_legacy_output_dir()
-    # Boot the session store and purge any expired sessions from previous runs.
     from tui_transcript.services.session_store import get_store
-    get_store()  # cleanup_expired() is called inside on first access
-    yield
+    get_store()
+    from tui_transcript.services.rag import background as rag_background
+    rag_background.start()
+    try:
+        yield
+    finally:
+        rag_background.shutdown()
 
 
 app = FastAPI(
@@ -88,8 +94,10 @@ app.include_router(documents.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
 app.include_router(generation.router, prefix="/api")
 app.include_router(learning.router, prefix="/api")
+app.include_router(materia_files.router, prefix="/api")
 app.include_router(models.router, prefix="/api")
 app.include_router(paths.router, prefix="/api")
+app.include_router(rag.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
 app.include_router(tags.router, prefix="/api")

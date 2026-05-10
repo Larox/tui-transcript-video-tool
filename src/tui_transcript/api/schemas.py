@@ -524,3 +524,38 @@ class BossBattleResponse(BaseModel):
     video_id: int
     week_start: str  # ISO date of Monday (start of current week)
     cards: list[WeeklyFailingCard]
+
+
+# ------------------------------------------------------------------
+# RAG: materia files + search
+# ------------------------------------------------------------------
+
+
+class MateriaFileEntry(BaseModel):
+    id: int
+    collection_id: int
+    filename: str
+    mime_type: str
+    size_bytes: int
+    status: str
+    error_message: str | None
+    uploaded_at: str
+    indexed_at: str | None
+
+
+class RagSearchHit(BaseModel):
+    text: str
+    score: float
+    collection_id: int
+    collection_name: str
+    source_type: str
+    source_label: str
+    source_id: str
+    page_number: int | None
+    chunk_index: int
+
+
+class RagSearchRequest(BaseModel):
+    query: str
+    collection_id: int | None = None
+    k: int = 8
