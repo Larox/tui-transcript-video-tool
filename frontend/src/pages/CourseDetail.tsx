@@ -1,12 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, CheckCircle2, Loader2, Plus, Sparkles, Video, XCircle } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, FileText, Loader2, Plus, Sparkles, Video, XCircle } from 'lucide-react';
 import { getCollection, type CollectionItemEntry } from '@/api/client';
 import { startGeneration } from '@/api/learning';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { MateriaFiles } from '@/components/MateriaFiles';
 import { useState } from 'react';
+
+type Tab = 'clases' | 'archivos';
+
+const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
+  { id: 'clases', label: 'Clases', icon: BookOpen },
+  { id: 'archivos', label: 'Archivos', icon: FileText },
+];
 
 function statusBadge(item: CollectionItemEntry) {
   if (item.output_path) {
@@ -69,6 +77,7 @@ export function CourseDetail() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
   const [genStates, setGenStates] = useState<ClassGenState[] | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('clases');
 
   const id = Number(courseId);
 
@@ -200,37 +209,63 @@ export function CourseDetail() {
         </div>
       )}
 
-      {/* Class list */}
-      {collection.items.length === 0 ? (
-        <div className="rounded-lg border-2 border-dashed p-12 text-center">
-          <Video className="mx-auto size-10 text-muted-foreground/40 mb-3" />
-          <p className="text-muted-foreground font-medium">No hay clases todavía</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Sube tu primera clase para empezar a estudiar.
-          </p>
-          <Button
-            className="mt-4"
-            onClick={() => navigate(`/upload?courseId=${id}`)}
-          >
-            <Plus className="size-4 mr-2" />
-            Subir Clase
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            {collection.items.length} clase{collection.items.length !== 1 ? 's' : ''}
-          </p>
-          {collection.items.map((item, idx) => (
-            <ClassCard
-              key={item.id}
-              item={item}
-              index={idx}
-              onClick={() => navigate(`/classes/${item.id}`)}
-            />
+      {/* Tabs */}
+      <div>
+        <div className="flex gap-1 border-b mb-4 overflow-x-auto">
+          {TABS.map(({ id: tabId, label, icon: Icon }) => (
+            <button
+              key={tabId}
+              type="button"
+              onClick={() => setActiveTab(tabId)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tabId
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
+              }`}
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </button>
           ))}
         </div>
-      )}
+
+        {activeTab === 'clases' && (
+          <>
+            {collection.items.length === 0 ? (
+              <div className="rounded-lg border-2 border-dashed p-12 text-center">
+                <Video className="mx-auto size-10 text-muted-foreground/40 mb-3" />
+                <p className="text-muted-foreground font-medium">No hay clases todavía</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Sube tu primera clase para empezar a estudiar.
+                </p>
+                <Button
+                  className="mt-4"
+                  onClick={() => navigate(`/upload?courseId=${id}`)}
+                >
+                  <Plus className="size-4 mr-2" />
+                  Subir Clase
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {collection.items.length} clase{collection.items.length !== 1 ? 's' : ''}
+                </p>
+                {collection.items.map((item, idx) => (
+                  <ClassCard
+                    key={item.id}
+                    item={item}
+                    index={idx}
+                    onClick={() => navigate(`/classes/${item.id}`)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'archivos' && <MateriaFiles collectionId={collection.id} />}
+      </div>
     </div>
   );
 }
