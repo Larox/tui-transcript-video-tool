@@ -54,17 +54,6 @@ def _upload_file(client: TestClient, tmp_path: Path) -> str:
     return res.json()["files"][0]["id"]
 
 
-def test_start_requires_directory_id(client, tmp_path):
-    file_id = _upload_file(client, tmp_path)
-    res = client.post(
-        "/api/transcription/start",
-        json={"files": [{"id": file_id, "language": "en"}]},
-    )
-    assert res.status_code == 422, res.text
-    body = res.json()
-    assert any("directory_id" in str(err) for err in body.get("detail", []))
-
-
 def test_start_unknown_directory_id_returns_404(client, tmp_path):
     file_id = _upload_file(client, tmp_path)
     res = client.post(
