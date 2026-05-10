@@ -210,9 +210,14 @@ class HistoryDB:
 
     def __init__(self, db_path: Path = DB_PATH) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path))
+        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
+        # Load sqlite-vec extension for RAG vector search.
+        import sqlite_vec
+        self._conn.enable_load_extension(True)
+        sqlite_vec.load(self._conn)
+        self._conn.enable_load_extension(False)
         self._conn.executescript(_SCHEMA)
         self._conn.executescript(_FTS_SCHEMA)
         self._migrate()
@@ -353,6 +358,52 @@ class HistoryDB:
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS card_review_events_video_date_idx
                 ON card_review_events (video_id, reviewed_at)
+        """)
+        # --- RAG schema (idempotent) ---
+        self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS materia_files (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                collection_id   INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+                filename        TEXT NOT NULL,
+                storage_path    TEXT NOT NULL,
+                mime_type       TEXT NOT NULL,
+                size_bytes      INTEGER NOT NULL,
+                status          TEXT NOT NULL,
+                error_message   TEXT,
+                uploaded_at     TEXT NOT NULL,
+                indexed_at      TEXT
+            );
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS rag_chunks USING vec0(
+                embedding float[1536]
+            );
+
+            CREATE TABLE IF NOT EXISTS rag_chunk_meta (
+                rowid           INTEGER PRIMARY KEY,
+                collection_id   INTEGER NOT NULL,
+                source_type     TEXT NOT NULL,
+                source_id       TEXT NOT NULL,
+                chunk_index     INTEGER NOT NULL,
+                text            TEXT NOT NULL,
+                page_number     INTEGER,
+                embedding_model TEXT NOT NULL,
+                UNIQUE(source_type, source_id, chunk_index, embedding_model)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rag_meta_collection
+                ON rag_chunk_meta(collection_id);
+            CREATE INDEX IF NOT EXISTS idx_rag_meta_source
+                ON rag_chunk_meta(source_type, source_id);
+
+            CREATE TABLE IF NOT EXISTS embedding_jobs_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_type TEXT NOT NULL,
+                source_id   TEXT NOT NULL,
+                batch_size  INTEGER NOT NULL,
+                tokens      INTEGER NOT NULL,
+                latency_ms  INTEGER NOT NULL,
+                cost_usd    REAL NOT NULL,
+                created_at  TEXT NOT NULL
+            );
         """)
         self._conn.commit()
 

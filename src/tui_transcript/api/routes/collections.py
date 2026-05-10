@@ -101,6 +101,14 @@ def add_items(collection_id: int, body: CollectionAddItems) -> dict:
     store = _store()
     try:
         store.add_items(collection_id, body.video_ids)
+        # Enqueue RAG reindex for each newly attached transcript.
+        from tui_transcript.services.rag import background as _rag_bg
+        for vid in body.video_ids:
+            try:
+                _rag_bg.enqueue_reindex_transcript(vid, collection_id)
+            except RuntimeError:
+                # Worker not started (isolated tests without lifespan).
+                pass
         return {"ok": True, "added": len(body.video_ids)}
     except KeyError as exc:
         raise HTTPException(404, str(exc))

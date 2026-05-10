@@ -84,6 +84,30 @@ async def _run_pipeline_with_sse(
                 })
             finally:
                 store.close()
+
+        # Enqueue RAG reindex for the produced videos in every collection
+        # that already contains them.
+        from tui_transcript.services.history import HistoryDB
+        from tui_transcript.services.rag import background as _rag_bg
+        for job in jobs:
+            if job.video_id is None:
+                continue
+            db = HistoryDB()
+            try:
+                cids = [
+                    row[0]
+                    for row in db._conn.execute(
+                        "SELECT collection_id FROM collection_items WHERE video_id=?",
+                        (job.video_id,),
+                    ).fetchall()
+                ]
+            finally:
+                db.close()
+            for cid in cids:
+                try:
+                    _rag_bg.enqueue_reindex_transcript(job.video_id, cid)
+                except RuntimeError:
+                    pass
     finally:
         queue.put_nowait({"type": "done"})
         complete_session(session_id)
