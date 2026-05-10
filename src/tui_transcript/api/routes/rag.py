@@ -17,11 +17,12 @@ def rag_search(req: RagSearchRequest) -> list[RagSearchHit]:
     # In tests the worker holds FakeEmbedder/FakeVectorStore; in production
     # it's OpenAIEmbedder + SqliteVecStore. Falling through to None lets
     # search() construct the production defaults if the worker is down.
+    embedder, store = background.get_components()
     hits = search(
         req.query,
         collection_id=req.collection_id,
         k=req.k,
-        embedder=background._embedder,
-        store=background._store,
+        embedder=embedder,
+        store=store,
     )
     return [RagSearchHit(**h.__dict__) for h in hits]

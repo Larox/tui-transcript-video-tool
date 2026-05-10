@@ -58,6 +58,14 @@ def shutdown() -> None:
     _store = None
 
 
+def get_components() -> tuple[Embedder | None, VectorStore | None]:
+    """Return the (embedder, store) the worker was booted with, or (None, None)
+    if the worker is down. Used by HTTP routes that want to reuse the same
+    embedding stack as the worker (so tests get fakes for free).
+    """
+    return _embedder, _store
+
+
 def enqueue_ingest_file(file_id: int) -> None:
     if _queue is None:
         raise RuntimeError("worker not started")

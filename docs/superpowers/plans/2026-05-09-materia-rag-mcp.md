@@ -1,5 +1,7 @@
 # Materia RAG + MCP Server Implementation Plan
 
+> **Status:** ✅ All 17 tasks complete. As-built and merged on `feat/materia-rag-mcp`. Final whole-branch review APPROVED. Checkboxes below remain in their original (unchecked) form for historical reference; consult the commit history (`git log --oneline 4cd9657..HEAD`) for the actual sequencing.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add per-materia retrieval-augmented generation. Users upload PDFs into a materia; the system extracts, chunks, embeds, and stores them in `sqlite-vec`. Existing class transcripts are silently mirrored into the same index. A stdio MCP server exposes two read-only tools (`list_materias`, `search_knowledge`) so external host LLMs (Claude Desktop, Cursor, Claude Code) can search by materia and topic.
