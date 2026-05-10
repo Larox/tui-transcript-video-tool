@@ -14,11 +14,17 @@ dependencies = [
     "faster-whisper>=1.0",
     "huggingface-hub>=0.24",
     "pydantic-ai[anthropic]>=1.90.0",
+    "sqlite-vec>=0.1.6",
+    "pypdf>=5.0",
+    "openai>=1.50",
+    "mcp>=1.0",
+    "tiktoken>=0.7",
 ]
 
 [project.scripts]
 tui-transcript = "tui_transcript.app:main"
 tui-transcript-api = "tui_transcript.api.main:run"
+tui_transcript_mcp = "tui_transcript_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -32,6 +38,7 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=9.0.3",
     "pytest-asyncio>=0.23",
+    "reportlab>=4.0",
 ]
 
 [tool.pytest.ini_options]
