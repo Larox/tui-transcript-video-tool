@@ -50,7 +50,7 @@
 - `frontend/src/components/MateriaFiles.tsx` — Archivos tab content
 
 **Modified:**
-- `pyproject.toml` — add `sqlite-vec`, `pypdf`, `openai`, `mcp`, `tiktoken` (runtime); add `reportlab` (dev, for fixture PDF generation); new console_script `tui_transcript_mcp`
+- `pyproject.toml` — add `sqlite-vec`, `pypdf`, `openai`, `mcp`, `tiktoken` (runtime); add `reportlab` (dev, for fixture PDF generation); new console_script `tui-transcript-mcp`
 - `src/tui_transcript/services/history.py` — add 4 RAG tables + `embedding_jobs_log` to `_migrate()`; load sqlite-vec extension
 - `src/tui_transcript/api/main.py` — register `materia_files` + `rag` routers; add lifespan that starts the background worker
 - `src/tui_transcript/api/routes/transcription.py` — after pipeline succeeds, enqueue `reindex_transcript` for every collection containing the video
@@ -98,7 +98,7 @@ dependencies = [
 [project.scripts]
 tui-transcript = "tui_transcript.app:main"
 tui-transcript-api = "tui_transcript.api.main:run"
-tui_transcript_mcp = "tui_transcript_mcp.server:main"
+tui-transcript-mcp = "tui_transcript_mcp.server:main"
 
 [dependency-groups]
 dev = [
@@ -3391,7 +3391,7 @@ git commit -m "feat(mcp): list_materias + search_knowledge tool functions"
 Create `src/tui_transcript_mcp/server.py`:
 
 ```python
-"""Stdio MCP server. Console script: `tui_transcript_mcp`.
+"""Stdio MCP server. Console script: `tui-transcript-mcp`.
 
 Two read-only tools:
 - list_materias()
@@ -3504,7 +3504,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Sync deps so the console_script registers**
 
 Run: `uv sync`
-Expected: completes successfully; `uv run which tui_transcript_mcp` (or `uv run tui_transcript_mcp --help` — note the SDK does not expose --help by default, so `which` is the right check) finds the new script.
+Expected: completes successfully; `uv run which tui-transcript-mcp` (or `uv run tui-transcript-mcp --help` — note the SDK does not expose --help by default, so `which` is the right check) finds the new script.
 
 Run: `uv run python -c "from tui_transcript_mcp.server import main; print('ok')"`
 Expected: prints `ok`.
@@ -3562,7 +3562,7 @@ Add to your Claude Desktop config at `~/Library/Application Support/Claude/claud
 {
   "mcpServers": {
     "tui-transcript": {
-      "command": "tui_transcript_mcp",
+      "command": "tui-transcript-mcp",
       "env": { "OPENAI_API_KEY": "sk-..." }
     }
   }

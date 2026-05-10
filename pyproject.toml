@@ -24,7 +24,7 @@ dependencies = [
 [project.scripts]
 tui-transcript = "tui_transcript.app:main"
 tui-transcript-api = "tui_transcript.api.main:run"
-tui_transcript_mcp = "tui_transcript_mcp.server:main"
+tui-transcript-mcp = "tui_transcript_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]

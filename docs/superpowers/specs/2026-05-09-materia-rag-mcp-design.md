@@ -137,7 +137,7 @@ frontend/src/api/rag.ts                  # client for materia_files + /rag/searc
 - `openai` (embeddings client; we already have `openai-compatible` paths via pydantic-ai but use the SDK directly here)
 - `mcp` (official Python SDK for MCP server)
 
-New script: `tui_transcript_mcp = "tui_transcript_mcp.server:main"`.
+New script: `tui-transcript-mcp = "tui_transcript_mcp.server:main"`.
 
 ---
 
@@ -207,7 +207,7 @@ Flow inside `search`:
 
 ## MCP server
 
-**Process model.** Standalone stdio server. Console script `tui_transcript_mcp` registered in `pyproject.toml`. Opens the same `~/.tui_transcript/history.db` as FastAPI (read-only; SQLite WAL allows concurrent access). Reads `OPENAI_API_KEY` from the host's environment.
+**Process model.** Standalone stdio server. Console script `tui-transcript-mcp` registered in `pyproject.toml`. Opens the same `~/.tui_transcript/history.db` as FastAPI (read-only; SQLite WAL allows concurrent access). Reads `OPENAI_API_KEY` from the host's environment.
 
 User configures their MCP host once. Claude Desktop / Cursor / Claude Code accept an `env` block to forward credentials:
 
@@ -215,7 +215,7 @@ User configures their MCP host once. Claude Desktop / Cursor / Claude Code accep
 {
   "mcpServers": {
     "tui-transcript": {
-      "command": "tui_transcript_mcp",
+      "command": "tui-transcript-mcp",
       "env": {
         "OPENAI_API_KEY": "sk-..."
       }
